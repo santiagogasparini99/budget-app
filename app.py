@@ -140,8 +140,8 @@ with st.sidebar:
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_dash, tab_gastos, tab_presup, tab_deudas, tab_ahorros = st.tabs(
-    ["📊  Dashboard", "💸  Movimientos", "📋  Presupuesto", "🤝  Deudas", "💰  Ahorros"]
+tab_dash, tab_presup, tab_gastos, tab_deudas, tab_ahorros = st.tabs(
+    ["📊  Dashboard", "📋  Presupuesto", "💸  Movimientos", "🤝  Deudas", "💰  Ahorros"]
 )
 
 
