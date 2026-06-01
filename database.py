@@ -1,9 +1,9 @@
 import io
 import os
-import ssl
 from contextlib import contextmanager
 from urllib.parse import urlparse
-import pg8000.dbapi as pglib
+import psycopg2
+import psycopg2.extras
 import pandas as pd
 
 DEFAULT_CATEGORIES = [
@@ -63,13 +63,13 @@ def _get_db_url() -> str:
 def get_conn():
     url = _get_db_url()
     parsed = urlparse(url)
-    conn = pglib.connect(
+    conn = psycopg2.connect(
         host=parsed.hostname,
         port=parsed.port or 5432,
-        database=parsed.path.lstrip("/"),
+        dbname=parsed.path.lstrip("/"),
         user=parsed.username,
         password=parsed.password,
-        ssl_context=ssl.create_default_context(),
+        sslmode="require",
     )
     try:
         yield conn
@@ -90,10 +90,10 @@ def _run(conn, sql: str, params=()):
 
 def _df(conn, sql: str, params=()) -> pd.DataFrame:
     """Execute a SELECT and return a DataFrame."""
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(sql, params)
-    cols = [d[0] for d in cur.description]
-    return pd.DataFrame(cur.fetchall(), columns=cols)
+    rows = cur.fetchall()
+    return pd.DataFrame([dict(r) for r in rows])
 
 
 # ─── Init ─────────────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ def add_category(name: str, color: str = "#808080") -> tuple:
         with get_conn() as conn:
             _run(conn, "INSERT INTO categories (name, color) VALUES (%s, %s)", (name, color))
         return True, f'Categoría "{name}" creada.'
-    except pglib.IntegrityError:
+    except psycopg2.IntegrityError:
         return False, f'La categoría "{name}" ya existe.'
 
 
@@ -208,7 +208,7 @@ def update_category(cat_id: int, name: str, color: str) -> tuple:
         with get_conn() as conn:
             _run(conn, "UPDATE categories SET name=%s, color=%s WHERE id=%s", (name, color, cat_id))
         return True, f'Categoría actualizada a "{name}".'
-    except pglib.IntegrityError:
+    except psycopg2.IntegrityError:
         return False, f'Ya existe una categoría llamada "{name}".'
 
 
