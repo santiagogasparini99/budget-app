@@ -193,6 +193,7 @@ def init_db():
             ("split_pct",     "REAL"),
         ]:
             _run(conn, f"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS {col} {definition}")
+        _run(conn, "ALTER TABLE settlements ADD COLUMN IF NOT EXISTS debt_type TEXT DEFAULT 'period'")
 
         for name, color in DEFAULT_CATEGORIES:
             _run(conn,
@@ -348,11 +349,12 @@ def reconcile_expense(expense_id: int, reconciled: bool = True):
 
 
 # ─── Settlements ──────────────────────────────────────────────────────────────
-def add_settlement(from_person: str, to_person: str, amount: float, description: str, settlement_date: str):
+def add_settlement(from_person: str, to_person: str, amount: float, description: str,
+                   settlement_date: str, debt_type: str = "period"):
     with get_conn() as conn:
         _run(conn,
-             "INSERT INTO settlements (from_person, to_person, amount, description, date) VALUES (%s,%s,%s,%s,%s)",
-             (from_person, to_person, amount, description, settlement_date))
+             "INSERT INTO settlements (from_person, to_person, amount, description, date, debt_type) VALUES (%s,%s,%s,%s,%s,%s)",
+             (from_person, to_person, amount, description, settlement_date, debt_type))
 
 
 def get_settlements(month: int = None, year: int = None) -> pd.DataFrame:
@@ -434,21 +436,57 @@ def calculate_spending_by_person_category(month: int, year: int,
     return df.groupby(["category_id", "category_name", "color", "person"])["spent"].sum().reset_index()
 
 
-def calculate_debt_balance(month: int = None, year: int = None,
-                            expenses: pd.DataFrame = None,
-                            settlements: pd.DataFrame = None,
-                            manual: pd.DataFrame = None) -> float:
-    """Positive = AZ owes SG.  Negative = SG owes AZ.
-    Reconciled expenses still count — 'conciliar' is a visual marker only."""
+def calculate_period_balance(month: int, year: int,
+                              expenses: pd.DataFrame = None,
+                              settlements: pd.DataFrame = None) -> float:
+    """Balance from UNRECONCILED shared expenses this month, minus period settlements.
+    Positive = AZ owes SG. Negative = SG owes AZ."""
     if expenses    is None: expenses    = get_expenses(month=month, year=year)
     if settlements is None: settlements = get_settlements(month=month, year=year)
-    if manual      is None: manual      = get_manual_debts(only_pending=True)
     balance = 0.0
 
     if not expenses.empty:
-        for _, row in expenses.iterrows():
+        for _, row in expenses[expenses["is_reconciled"].fillna(0) != 1].iterrows():
             if row["split_type"] in ("shared", "for_other", "custom"):
-                amt  = float(row["amount"]) * _other_pct(row)
+                amt = float(row["amount"]) * _other_pct(row)
+                balance += amt if row["payer"] == "SG" else -amt
+
+    if not settlements.empty:
+        for _, row in settlements[settlements.get("debt_type", "period") == "period"].iterrows():
+            amt = float(row["amount"])
+            if row["from_person"] == "AZ" and row["to_person"] == "SG":
+                balance -= amt
+            elif row["from_person"] == "SG" and row["to_person"] == "AZ":
+                balance += amt
+
+    return balance
+
+
+def calculate_accumulated_balance(reconciled_expenses: pd.DataFrame = None,
+                                   manual: pd.DataFrame = None,
+                                   accumulated_settlements: pd.DataFrame = None) -> float:
+    """Balance from RECONCILED shared expenses (all months) + manual debts + accumulated payments.
+    Positive = AZ owes SG. Negative = SG owes AZ."""
+    if reconciled_expenses is None:
+        all_exp = get_expenses()
+        reconciled_expenses = (
+            all_exp[all_exp["is_reconciled"].fillna(0) == 1]
+            if not all_exp.empty else pd.DataFrame()
+        )
+    if manual is None:
+        manual = get_manual_debts(only_pending=True)
+    if accumulated_settlements is None:
+        all_sett = get_settlements()
+        accumulated_settlements = (
+            all_sett[all_sett["debt_type"] == "accumulated"]
+            if not all_sett.empty and "debt_type" in all_sett.columns else pd.DataFrame()
+        )
+    balance = 0.0
+
+    if not reconciled_expenses.empty:
+        for _, row in reconciled_expenses.iterrows():
+            if row["split_type"] in ("shared", "for_other", "custom"):
+                amt = float(row["amount"]) * _other_pct(row)
                 balance += amt if row["payer"] == "SG" else -amt
 
     if not manual.empty:
@@ -459,8 +497,8 @@ def calculate_debt_balance(month: int = None, year: int = None,
             elif row["debtor"] == "SG" and row["creditor"] == "AZ":
                 balance -= amt
 
-    if not settlements.empty:
-        for _, row in settlements.iterrows():
+    if not accumulated_settlements.empty:
+        for _, row in accumulated_settlements.iterrows():
             amt = float(row["amount"])
             if row["from_person"] == "AZ" and row["to_person"] == "SG":
                 balance -= amt
@@ -599,7 +637,7 @@ def build_excel_export(month: int, year: int) -> bytes:
 
     # ── Sheet 3: Deudas ───────────────────────────────────────────────────────
     ws3 = wb.create_sheet("Deudas")
-    balance = calculate_debt_balance(month=month, year=year)
+    balance = calculate_period_balance(month, year) + calculate_accumulated_balance()
     ws3.append(["Resumen de Deudas", f"{month_name} {year}"])
     ws3["A1"].font = Font(bold=True, size=13)
     ws3.append([])

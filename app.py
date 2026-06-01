@@ -5,35 +5,49 @@ import plotly.express as px
 from datetime import datetime, date
 import database as db
 
-# ─── Cached DB reads (TTL 30s, cleared on any write) ─────────────────────────
+# ─── Cached DB reads ──────────────────────────────────────────────────────────
 @st.cache_data(ttl=30, show_spinner=False)
-def _expenses(m, y):      return db.get_expenses(month=m, year=y)
+def _expenses(m, y):    return db.get_expenses(month=m, year=y)
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _budgets(m, y):       return db.get_budgets(month=m, year=y)
+def _all_expenses():    return db.get_expenses()
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _budgets(m, y):     return db.get_budgets(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _settlements(m, y): return db.get_settlements(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _all_settlements(): return db.get_settlements()
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _manual_debts():    return db.get_manual_debts(only_pending=True)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _categories():      return db.get_categories()
 
 def _spending(m, y):
     return db.calculate_spending_by_person_category(m, y, expenses=_expenses(m, y))
 
-def _balance(m, y):
-    exp  = _expenses(m, y) if m is not None else None
-    sett = _settlements(m, y) if m is not None else None
-    return db.calculate_debt_balance(m, y, expenses=exp, settlements=sett, manual=_manual_debts())
+def _period_balance(m, y):
+    return db.calculate_period_balance(m, y, expenses=_expenses(m, y), settlements=_settlements(m, y))
+
+def _accum_balance():
+    all_exp  = _all_expenses()
+    rec_exp  = all_exp[all_exp["is_reconciled"].fillna(0) == 1] if not all_exp.empty else all_exp
+    all_sett = _all_settlements()
+    accum_s  = (all_sett[all_sett["debt_type"] == "accumulated"]
+                if not all_sett.empty and "debt_type" in all_sett.columns else all_sett.iloc[0:0])
+    return db.calculate_accumulated_balance(reconciled_expenses=rec_exp, manual=_manual_debts(),
+                                            accumulated_settlements=accum_s)
 
 def _daily(m, y):
     return db.get_daily_spending(m, y, expenses=_expenses(m, y))
 
-@st.cache_data(ttl=30, show_spinner=False)
-def _settlements(m, y):   return db.get_settlements(month=m, year=y)
-
-@st.cache_data(ttl=30, show_spinner=False)
-def _manual_debts():      return db.get_manual_debts(only_pending=True)
-
-@st.cache_data(ttl=60, show_spinner=False)
-def _categories():        return db.get_categories()
-
 def _clear_cache():
-    _expenses.clear(); _budgets.clear(); _settlements.clear()
+    _expenses.clear(); _all_expenses.clear(); _budgets.clear()
+    _settlements.clear(); _all_settlements.clear()
     _manual_debts.clear(); _categories.clear()
 
 st.set_page_config(
@@ -142,9 +156,9 @@ tab_dash, tab_gastos, tab_presup, tab_deudas = st.tabs(
 def debt_html(balance: float, suffix: str = "") -> str:
     a = abs(balance)
     if balance > 0.01:
-        return f'<div class="debt-card debt-owe">Alex debe a Santiago{suffix}<br><b>${a:,.2f}</b></div>'
+        return f'<div class="debt-card debt-owe">Alex debe a Santiago{suffix}<br><b>${a:,.0f}</b></div>'
     elif balance < -0.01:
-        return f'<div class="debt-card debt-recv">Santiago debe a Alex{suffix}<br><b>${a:,.2f}</b></div>'
+        return f'<div class="debt-card debt-recv">Santiago debe a Alex{suffix}<br><b>${a:,.0f}</b></div>'
     return f'<div class="debt-card debt-even">✅ Sin deudas{suffix}</div>'
 
 
@@ -221,7 +235,7 @@ with tab_dash:
     expenses_df = _expenses(M, Y)
     budgets_df  = _budgets(M, Y)
     spending_df = _spending(M, Y)
-    balance     = _balance(M, Y)
+    balance     = _period_balance(M, Y) + _accum_balance()
 
     # ── Person filter ─────────────────────────────────────────────────────────
     hdr, filter_col = st.columns([3, 2])
@@ -459,9 +473,9 @@ with tab_gastos:
                 filtered = filtered[filtered["split_type"] == ft]
 
             sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("Total pagado", f"${filtered['amount'].sum():,.2f}")
+            sm1.metric("Total pagado", f"${filtered['amount'].sum():,.0f}")
             sm2.metric("Transacciones", len(filtered))
-            sm3.metric("Promedio", f"${filtered['amount'].mean():,.2f}" if not filtered.empty else "$0.00")
+            sm3.metric("Promedio", f"${filtered['amount'].mean():,.0f}" if not filtered.empty else "$0.00")
 
             st.markdown("")
 
@@ -493,7 +507,7 @@ with tab_gastos:
                     unsafe_allow_html=True,
                 )
                 c_who.markdown(f"**{row['payer']}**")
-                c_amt.markdown(f"**${row['amount']:,.2f}**")
+                c_amt.markdown(f"**${row['amount']:,.0f}**")
                 if c_del.button("🗑", key=f"del_e_{row['id']}", help="Eliminar"):
                     db.delete_expense(int(row["id"]))
                     _clear_cache(); st.rerun()
@@ -541,7 +555,7 @@ with tab_presup:
 
     total_sg = edited["Santiago (SG) $"].sum()
     total_az = edited["Alex (AZ) $"].sum()
-    st.markdown(f"**Total Santiago:** ${total_sg:,.2f} &nbsp;&nbsp; **Total Alex:** ${total_az:,.2f}", unsafe_allow_html=True)
+    st.markdown(f"**Total Santiago:** ${total_sg:,.0f} &nbsp;&nbsp; **Total Alex:** ${total_az:,.0f}", unsafe_allow_html=True)
 
     if st.button("💾 Guardar Presupuesto", type="primary"):
         for idx, row in edited.iterrows():
@@ -625,30 +639,33 @@ with tab_presup:
 with tab_deudas:
     st.markdown(f"## 🤝 Deudas · {sel_month_name} {sel_year}")
 
-    balance     = _balance(M, Y)
-    balance_all = _balance(None, None)
-    manual_df   = _manual_debts()
+    period_bal = _period_balance(M, Y)
+    accum_bal  = _accum_balance()
+    total_bal  = period_bal + accum_bal
+    manual_df  = _manual_debts()
 
-    kd1, kd2 = st.columns(2)
+    kd1, kd2, kd3 = st.columns(3)
     with kd1:
-        st.markdown("### Este mes")
-        st.markdown(debt_html(balance, " · este mes"), unsafe_allow_html=True)
+        st.markdown("### Período")
+        st.markdown(debt_html(period_bal, f" · {sel_month_name}"), unsafe_allow_html=True)
     with kd2:
-        st.markdown("### Acumulado total")
-        st.markdown(debt_html(balance_all, " · total"), unsafe_allow_html=True)
+        st.markdown("### Acumulada")
+        st.markdown(debt_html(accum_bal, " · acumulada"), unsafe_allow_html=True)
+    with kd3:
+        st.markdown("### Total")
+        st.markdown(debt_html(total_bal, " · total"), unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Three column layout ───────────────────────────────────────────────────
     col_shared, col_manual, col_pay = st.columns([2, 2, 1.4], gap="medium")
 
-    # ── Shared / for-other expenses ───────────────────────────────────────────
+    # ── Gastos compartidos del período ────────────────────────────────────────
     with col_shared:
-        st.markdown('<div class="sec-head">Gastos Compartidos / Para el Otro</div>',
+        st.markdown('<div class="sec-head">Gastos Período (Conciliar → pasan a Acumulada)</div>',
                     unsafe_allow_html=True)
-        exp_this = _expenses(M, Y)
+        exp_this   = _expenses(M, Y)
         shared_exp = (
-            exp_this[exp_this["split_type"].isin(["shared", "for_other"])]
+            exp_this[exp_this["split_type"].isin(["shared", "for_other", "custom"])]
             if not exp_this.empty else pd.DataFrame()
         )
         if shared_exp.empty:
@@ -656,44 +673,45 @@ with tab_deudas:
         else:
             for _, row in shared_exp.iterrows():
                 other      = "AZ" if row["payer"] == "SG" else "SG"
-                bc         = "#f6ad55" if row["split_type"] == "shared" else "#fc8181"
+                bc         = "#f6ad55" if row["split_type"] == "shared" else ("#667eea" if row["split_type"] == "custom" else "#fc8181")
                 tl         = db.SPLIT_TYPES[row["split_type"]]
-                debt_amt   = row["amount"] / 2 if row["split_type"] == "shared" else row["amount"]
+                debt_amt   = float(row["amount"]) * db._other_pct(row)
                 reconciled = (row.get("is_reconciled") or 0) == 1
                 fade       = "opacity:0.4;" if reconciled else ""
+                tag        = " · <b style='color:#38a169'>Acumulada</b>" if reconciled else " · <b style='color:#e53e3e'>Período</b>"
                 c1, c2, c3 = st.columns([2.5, 1.8, 1.0])
                 c1.markdown(
                     f"<div style='{fade}'>"
-                    f"<b>{row['description']}</b> — ${row['amount']:,.2f}<br>"
-                    f"<small style='color:#888'>{row['category_name']} · {row['date']} · Pagó {row['payer']}</small>"
+                    f"<b>{row['description']}</b> — ${row['amount']:,.0f}<br>"
+                    f"<small style='color:#888'>{row['category_name']} · {row['date']} · Pagó {row['payer']}{tag}</small>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
                 c2.markdown(
                     f"<div style='{fade}'>"
                     f"<span class='badge' style='background:{bc}18;color:{bc}'>{tl}</span><br>"
-                    f"<small style='color:#888'>{other} debe ${debt_amt:,.2f}</small>"
+                    f"<small style='color:#888'>{other} debe ${debt_amt:,.0f}</small>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
                 if reconciled:
-                    if c3.button("↩ Deshacer", key=f"unrec_{row['id']}", help="Deshacer conciliación", use_container_width=True):
+                    if c3.button("↩ Período", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
                         _clear_cache(); st.rerun()
                 else:
-                    if c3.button("✅ Conciliar", key=f"rec_{row['id']}", help="Marcar como saldado (excluye del balance)", use_container_width=True):
+                    if c3.button("→ Acumular", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
                         _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
-    # ── Manual debts ──────────────────────────────────────────────────────────
+    # ── Deudas manuales ───────────────────────────────────────────────────────
     with col_manual:
-        st.markdown('<div class="sec-head">Deudas Manuales (fuera de presupuesto)</div>',
+        st.markdown('<div class="sec-head">Deudas Manuales (van a Acumulada)</div>',
                     unsafe_allow_html=True)
 
         with st.expander("➕ Nueva deuda manual"):
             with st.form("manual_debt_form", clear_on_submit=True):
-                md_desc    = st.text_input("Descripción *", placeholder="Ej: Plata prestada, entrada concierto…")
+                md_desc    = st.text_input("Descripción *", placeholder="Ej: Plata prestada…")
                 md_c1, md_c2 = st.columns(2)
                 md_debtor  = md_c1.selectbox("Quien debe", db.PERSONS,
                                               format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
@@ -702,8 +720,7 @@ with tab_deudas:
                 md_c2.markdown(f"**A quien:** {md_creditor_val} · {db.PERSON_NAMES[md_creditor_val]}")
                 md_amount  = st.number_input("Monto ($) *", min_value=0.01, value=None, step=1.0, format="%.2f", key="md_amt")
                 md_date    = st.date_input("Fecha", value=date.today(), key="md_date")
-
-                if st.form_submit_button("💾 Agregar deuda", use_container_width=True, type="primary"):
+                if st.form_submit_button("💾 Agregar", use_container_width=True, type="primary"):
                     if not md_desc.strip():
                         st.error("La descripción es requerida.")
                     elif md_amount is None or md_amount <= 0:
@@ -726,7 +743,7 @@ with tab_deudas:
                     f"<small style='color:#888'>{debtor_name} → {creditor_name} · {row['date']}</small>",
                     unsafe_allow_html=True,
                 )
-                c2.markdown(f"**${row['amount']:,.2f}**")
+                c2.markdown(f"**${row['amount']:,.0f}**")
                 btn_col1, btn_col2 = c3.columns(2)
                 if btn_col1.button("✅", key=f"settle_md_{row['id']}", help="Marcar como saldada"):
                     db.settle_manual_debt(int(row["id"]))
@@ -736,13 +753,12 @@ with tab_deudas:
                     _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
-    # ── Registrar pago / historial ────────────────────────────────────────────
+    # ── Registrar pago ────────────────────────────────────────────────────────
     with col_pay:
         st.markdown('<div class="sec-head">💳 Registrar Pago</div>', unsafe_allow_html=True)
 
-        # Default direction based on balance
-        default_from = "AZ" if balance >= 0 else "SG"
-        suggested    = max(0.01, round(abs(balance), 2))   # ← fix: never below 0.01
+        default_from = "AZ" if total_bal >= 0 else "SG"
+        suggested    = max(0.01, round(abs(total_bal), 2))
 
         with st.form("settlement_form", clear_on_submit=True):
             s_from = st.selectbox(
@@ -752,31 +768,33 @@ with tab_deudas:
             )
             s_to_val = "AZ" if s_from == "SG" else "SG"
             st.markdown(f"**Pago a:** {s_to_val} · {db.PERSON_NAMES[s_to_val]}")
-
             s_amount = st.number_input("Monto ($)", min_value=0.01,
                                        value=suggested, step=1.0, format="%.2f")
-            s_desc  = st.text_input("Descripción", value="Liquidación de deudas")
-            s_date  = st.date_input("Fecha", value=date.today())
-
+            s_debt_type = st.radio("Desconta de", ["Deuda del período", "Deuda acumulada"],
+                                   horizontal=True)
+            s_desc = st.text_input("Descripción", value="Liquidación de deudas")
+            s_date = st.date_input("Fecha", value=date.today())
             if st.form_submit_button("✅ Registrar", use_container_width=True, type="primary"):
-                db.add_settlement(s_from, s_to_val, float(s_amount), s_desc, s_date.isoformat())
+                dt = "period" if s_debt_type == "Deuda del período" else "accumulated"
+                db.add_settlement(s_from, s_to_val, float(s_amount), s_desc, s_date.isoformat(), debt_type=dt)
                 st.success("✅ Pago registrado!")
                 _clear_cache(); st.rerun()
 
         st.markdown("")
         st.markdown('<div class="sec-head">Historial de Pagos</div>', unsafe_allow_html=True)
-        settlements = _settlements(M, Y)
-        if settlements.empty:
-            st.caption("Sin pagos este mes.")
+        all_sett_hist = _all_settlements()
+        if all_sett_hist.empty:
+            st.caption("Sin pagos registrados.")
         else:
-            for _, row in settlements.iterrows():
+            for _, row in all_sett_hist.iterrows():
+                dt_label = "📅 Período" if row.get("debt_type", "period") == "period" else "📦 Acumulada"
                 c1, c2, c3 = st.columns([2.5, 2, 0.4])
                 c1.markdown(
                     f"**{row['from_person']}** → **{row['to_person']}**<br>"
-                    f"<small style='color:#888'>{row['date']}</small>",
+                    f"<small style='color:#888'>{row['date']} · {dt_label}</small>",
                     unsafe_allow_html=True,
                 )
-                c2.markdown(f"${row['amount']:,.2f}<br><small>{row['description']}</small>",
+                c2.markdown(f"${row['amount']:,.0f}<br><small>{row['description']}</small>",
                             unsafe_allow_html=True)
                 if c3.button("🗑", key=f"del_s_{row['id']}"):
                     db.delete_settlement(int(row["id"]))
