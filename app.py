@@ -436,8 +436,6 @@ with tab_dash:
         fill="tozeroy", fillcolor="rgba(240,147,251,0.1)",
         hovertemplate="<b>Alex</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
     ))
-    fig_proj.add_vline(x=proj_months[0], line_dash="dot", line_color="#aaa",
-                       annotation_text="Hoy", annotation_position="top right")
     fig_proj.update_layout(
         height=280, margin=dict(l=0, r=0, t=20, b=0),
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
