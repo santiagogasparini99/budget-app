@@ -177,7 +177,7 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
                 "over":    max(0.0, spent - budget),
                 "total":   spent,
                 "pct":     pct,
-                "color":   "#fc8181" if spent > budget else ("#f6ad55" if pct >= 80 else "#667eea"),
+                "color":   "#b03a3a" if spent > budget else ("#b07a2a" if pct >= 80 else "#4a5bb8"),
             })
 
     if not rows:
@@ -196,7 +196,7 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
     # Remaining segment — carries hover for when spent=0 (zero-width gastado bar is not hoverable)
     fig.add_trace(go.Bar(
         name="Restante", x=(df["budget"] - df["spent"]).clip(lower=0), y=df["label"],
-        orientation="h", marker=dict(color="#e8edf7", line_width=0),
+        orientation="h", marker=dict(color="#252d42", line_width=0),
         customdata=list(zip(df["total"], df["budget"], df["pct"])),
         hovertemplate="<b>%{y}</b><br>Gastado: $%{customdata[0]:,.2f} / $%{customdata[1]:,.2f}<br>%{customdata[2]:.1f}%<extra></extra>",
         showlegend=True,
@@ -204,7 +204,7 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
     # Over-budget segment
     fig.add_trace(go.Bar(
         name="Exceso", x=df["over"], y=df["label"],
-        orientation="h", marker=dict(color="#fc8181", opacity=0.85, line_width=0),
+        orientation="h", marker=dict(color="#b03a3a", opacity=0.9, line_width=0),
         hovertemplate="<b>%{y}</b><br>Exceso: $%{x:,.2f}<extra></extra>",
     ))
 
@@ -254,7 +254,13 @@ with tab_dash:
     # ── KPI cards — una fila por Santiago, Alex y Ambos ──────────────────────
     FUN_CATS = ["Salidas a comer", "Bares", "Café", "Cultura"]
 
-    kpi_rows = [("Santiago", ["SG"]), ("Alex", ["AZ"]), ("Ambos", ["SG", "AZ"])]
+    if dash_filter == "Santiago (SG)":
+        kpi_rows = [("Santiago", ["SG"])]
+    elif dash_filter == "Alex (AZ)":
+        kpi_rows = [("Alex", ["AZ"])]
+    else:
+        kpi_rows = [("Santiago", ["SG"]), ("Alex", ["AZ"]), ("Ambos", ["SG", "AZ"])]
+
     for row_label, row_persons in kpi_rows:
         budget = (sum(budgets_df[f"budget_{p}"].sum() for p in row_persons)
                   if not budgets_df.empty else 0.0)
@@ -289,14 +295,30 @@ with tab_dash:
 
     # ── Progress bars (Plotly) ────────────────────────────────────────────────
     if not budgets_df.empty:
-        st.markdown('<div class="sec-head">Progreso de Presupuesto</div>', unsafe_allow_html=True)
+        ph1, ph2, ph3 = st.columns([2, 2, 3])
+        ph1.markdown('<div class="sec-head">Progreso de Presupuesto</div>', unsafe_allow_html=True)
+
+        # Category group filter
+        CAT_GROUPS = {
+            "Todas": None,
+            "Diversión": ["Salidas a comer", "Bares", "Café", "Cultura"],
+            "Ahorro":    ["Spain Move Fund", "Emergency Savings", "Viajes"],
+            "Hogar":     ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
+        }
+        prog_group = ph2.selectbox("Grupo", list(CAT_GROUPS.keys()),
+                                   label_visibility="collapsed", key="prog_group")
+        prog_filter = CAT_GROUPS[prog_group]
+
+        # Apply category filter to budgets_df for chart
+        bdf_filtered = (budgets_df[budgets_df["category_name"].isin(prog_filter)]
+                        if prog_filter else budgets_df)
 
         if len(persons_dash) == 2:
             c_sg, c_az = st.columns(2)
             for person, col in [("SG", c_sg), ("AZ", c_az)]:
                 with col:
                     st.markdown(f"**{db.PERSON_NAMES[person]}**")
-                    fig_prog = progress_chart([person], budgets_df, spending_df)
+                    fig_prog = progress_chart([person], bdf_filtered, spending_df)
                     if fig_prog:
                         st.plotly_chart(fig_prog, use_container_width=True, config={"displayModeBar": False})
                     else:
@@ -304,7 +326,7 @@ with tab_dash:
         else:
             person = persons_dash[0]
             st.markdown(f"**{db.PERSON_NAMES[person]}**")
-            fig_prog = progress_chart([person], budgets_df, spending_df)
+            fig_prog = progress_chart([person], bdf_filtered, spending_df)
             if fig_prog:
                 st.plotly_chart(fig_prog, use_container_width=True, config={"displayModeBar": False})
             else:
@@ -355,7 +377,7 @@ with tab_dash:
                     fig_pie = px.pie(
                         values=cat_totals.values, names=cat_totals.index,
                         hole=0.42,
-                        color_discrete_sequence=px.colors.qualitative.Pastel,
+                        color_discrete_sequence=px.colors.qualitative.Dark24,
                     )
                     fig_pie.update_layout(
                         height=270, margin=dict(l=0, r=0, t=10, b=0),
@@ -426,27 +448,29 @@ with tab_dash:
 
     fig_proj = go.Figure()
     fig_proj.add_trace(go.Scatter(
-        x=proj_months, y=proj_sg, name="Santiago",
-        mode="lines+markers", line=dict(color="#667eea", width=2),
-        fill="tozeroy", fillcolor="rgba(102,126,234,0.1)",
+        x=proj_months, y=proj_sg, name=f"Santiago (${rate_sg:,.0f}/mes)",
+        mode="lines+markers",
+        line=dict(color="#667eea", width=3, dash="solid"),
+        marker=dict(size=6),
+        fill="tozeroy", fillcolor="rgba(102,126,234,0.12)",
         hovertemplate="<b>Santiago</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
     ))
     fig_proj.add_trace(go.Scatter(
-        x=proj_months, y=proj_az, name="Alex",
-        mode="lines+markers", line=dict(color="#f093fb", width=2),
-        fill="tozeroy", fillcolor="rgba(240,147,251,0.1)",
+        x=proj_months, y=proj_az, name=f"Alex (${rate_az:,.0f}/mes)",
+        mode="lines+markers",
+        line=dict(color="#48bb78", width=3, dash="dot"),
+        marker=dict(size=6, symbol="diamond"),
+        fill="tozeroy", fillcolor="rgba(72,187,120,0.12)",
         hovertemplate="<b>Alex</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
     ))
     fig_proj.update_layout(
         height=280, margin=dict(l=0, r=0, t=20, b=0),
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", y=1.1),
+        legend=dict(orientation="h", y=1.12, font_size=11),
         xaxis=dict(showgrid=False),
-        yaxis=dict(gridcolor="#f0f0f0", tickprefix="$"),
+        yaxis=dict(gridcolor="#2d3748", tickprefix="$"),
     )
     st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
-    st.caption(f"Proyección basada en presupuesto de Spain Move Fund + Emergency Savings + Viajes · "
-               f"SG: ${rate_sg:,.0f}/mes · AZ: ${rate_az:,.0f}/mes")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
