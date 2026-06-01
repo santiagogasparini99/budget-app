@@ -352,6 +352,35 @@ def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
         return _df(conn, query, params)
 
 
+def update_expense(
+    expense_id: int,
+    description: str,
+    category_id: int,
+    payer: str,
+    amount: float,
+    split_type: str,
+    expense_date: str,
+    notes: str = None,
+    budget_month: int = None,
+    budget_year: int = None,
+    split_pct: float = None,
+):
+    with get_conn() as conn:
+        _run(conn, """
+            UPDATE expenses SET
+                description=%s, category_id=%s, payer=%s, amount=%s,
+                split_type=%s, date=%s, notes=%s, budget_month=%s,
+                budget_year=%s, split_pct=%s
+            WHERE id=%s
+        """, (description, category_id, payer, amount, split_type,
+              expense_date, notes, budget_month, budget_year, split_pct, expense_id))
+
+
+def delete_savings_by_expense(expense_id: int):
+    with get_conn() as conn:
+        _run(conn, "DELETE FROM savings WHERE expense_id=%s", (expense_id,))
+
+
 def delete_expense(expense_id: int):
     with get_conn() as conn:
         _run(conn, "DELETE FROM savings  WHERE expense_id=%s", (expense_id,))

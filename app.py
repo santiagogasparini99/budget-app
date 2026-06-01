@@ -598,37 +598,154 @@ with tab_gastos:
             st.markdown("")
 
             TYPE_COLORS = {"personal": "#667eea", "shared": "#f6ad55", "for_other": "#fc8181"}
+            SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
 
             for _, row in filtered.iterrows():
-                tc = TYPE_COLORS.get(row["split_type"], "#aaa")
-                tl = db.SPLIT_TYPES.get(row["split_type"], row["split_type"])
+                row_id = int(row["id"])
+                editing = st.session_state.get("edit_expense_id") == row_id
 
-                # Show budget month badge if different from real date
-                bm_info = ""
-                bm_val  = row.get("budget_month")
-                by_val  = row.get("budget_year")
-                if bm_val is not None and not (isinstance(bm_val, float) and pd.isna(bm_val)):
-                    bm_label = db.MONTHS_ES.get(int(bm_val), "?")
-                    bm_info  = f" · <span style='color:#3182ce;font-size:10px'>📅 Presup. {bm_label} {int(by_val)}</span>"
+                if editing:
+                    st.markdown(
+                        f"<div style='background:#252d42;border-radius:10px;padding:12px 16px;margin-bottom:4px'>"
+                        f"<b>✏️ Editando:</b> {row['description']}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    with st.form(f"edit_expense_form_{row_id}"):
+                        e_desc = st.text_input("Descripción", value=row["description"])
 
-                notes_html = f"<br><small style='color:#aaa'>{row['notes']}</small>" if row.get("notes") else ""
+                        ef1, ef2 = st.columns(2)
+                        cat_keys = list(cat_name_to_id.keys())
+                        e_cat_name = ef1.selectbox(
+                            "Categoría", cat_keys,
+                            index=cat_keys.index(row["category_name"]) if row["category_name"] in cat_keys else 0,
+                        )
+                        e_payer = ef2.selectbox(
+                            "Pagó", db.PERSONS,
+                            index=db.PERSONS.index(row["payer"]),
+                            format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
+                        )
 
-                c_desc, c_tag, c_who, c_amt, c_del = st.columns([3.5, 2, 1, 1.2, 0.4])
-                c_desc.markdown(
-                    f"**{row['description']}**"
-                    f"<br><small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
-                    f"{notes_html}",
-                    unsafe_allow_html=True,
-                )
-                c_tag.markdown(
-                    f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
-                    unsafe_allow_html=True,
-                )
-                c_who.markdown(f"**{row['payer']}**")
-                c_amt.markdown(f"**${row['amount']:,.0f}**")
-                if c_del.button("🗑", key=f"del_e_{row['id']}", help="Eliminar"):
-                    db.delete_expense(int(row["id"]))
-                    _clear_cache(); st.rerun()
+                        ef3, ef4 = st.columns(2)
+                        e_amount = ef3.number_input("Monto ($)", min_value=0.0,
+                                                    value=float(row["amount"]), step=1.0, format="%.2f")
+                        e_date = ef4.date_input(
+                            "Fecha real",
+                            value=date.fromisoformat(str(row["date"])[:10]),
+                        )
+
+                        split_keys = list(db.SPLIT_TYPES.keys())
+                        e_split_type = st.selectbox(
+                            "Tipo de gasto", split_keys,
+                            index=split_keys.index(row["split_type"]) if row["split_type"] in split_keys else 0,
+                            format_func=lambda x: db.SPLIT_TYPES[x],
+                        )
+
+                        cur_pct = int(row["split_pct"]) if (row.get("split_pct") is not None
+                                                            and not pd.isna(row["split_pct"])) else 50
+                        e_split_pct = st.slider(
+                            "% que paga el otro (solo para % Personalizado)",
+                            0, 100, cur_pct, step=5,
+                        )
+
+                        e_bm_val = row.get("budget_month")
+                        e_by_val = row.get("budget_year")
+                        has_override = (e_bm_val is not None
+                                        and not (isinstance(e_bm_val, float) and pd.isna(e_bm_val)))
+                        e_override = st.checkbox("📅 Asignar a un mes de presupuesto diferente",
+                                                 value=has_override)
+                        e_bm, e_by = None, None
+                        if e_override:
+                            eo1, eo2 = st.columns(2)
+                            bm_idx = int(e_bm_val) - 1 if has_override else M - 1
+                            by_idx = years.index(int(e_by_val)) if has_override and int(e_by_val) in years else years.index(Y)
+                            e_bm_name = eo1.selectbox("Mes presupuesto", month_names, index=bm_idx,
+                                                       key=f"ebm_{row_id}")
+                            e_by = eo2.selectbox("Año presupuesto", years, index=by_idx, key=f"eby_{row_id}")
+                            e_bm = months_inv[e_bm_name]
+
+                        e_notes = st.text_area("Notas (opcional)",
+                                               value=row.get("notes") or "", height=55)
+
+                        es1, es2 = st.columns(2)
+                        save_edit   = es1.form_submit_button("💾 Actualizar", use_container_width=True, type="primary")
+                        cancel_edit = es2.form_submit_button("✖ Cancelar",   use_container_width=True)
+
+                        if save_edit:
+                            if not e_desc.strip():
+                                st.error("La descripción es requerida.")
+                            elif e_amount <= 0:
+                                st.error("El monto debe ser mayor a $0.")
+                            else:
+                                final_split_pct = float(e_split_pct) if e_split_type == "custom" else None
+                                db.update_expense(
+                                    row_id,
+                                    e_desc.strip(),
+                                    cat_name_to_id[e_cat_name],
+                                    e_payer,
+                                    float(e_amount),
+                                    e_split_type,
+                                    e_date.isoformat(),
+                                    e_notes.strip() or None,
+                                    e_bm, e_by,
+                                    final_split_pct,
+                                )
+                                # Re-link savings entries
+                                db.delete_savings_by_expense(row_id)
+                                if e_cat_name in SAVINGS_CATS:
+                                    amt    = float(e_amount)
+                                    desc_s = f"{e_cat_name}: {e_desc.strip()}"
+                                    other  = "AZ" if e_payer == "SG" else "SG"
+                                    opct   = (float(e_split_pct) / 100) if e_split_type == "custom" else 0.5
+                                    if e_split_type == "personal":
+                                        db.add_savings_entry(e_payer, amt, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                    elif e_split_type == "shared":
+                                        db.add_savings_entry(e_payer, amt * 0.5, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                        db.add_savings_entry(other,   amt * 0.5, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                    elif e_split_type == "for_other":
+                                        db.add_savings_entry(other, amt, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                    elif e_split_type == "custom":
+                                        db.add_savings_entry(e_payer, amt * (1 - opct), "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                        db.add_savings_entry(other,   amt * opct,        "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                st.session_state["edit_expense_id"] = None
+                                _clear_cache(); st.rerun()
+
+                        if cancel_edit:
+                            st.session_state["edit_expense_id"] = None
+                            st.rerun()
+
+                else:
+                    tc = TYPE_COLORS.get(row["split_type"], "#aaa")
+                    tl = db.SPLIT_TYPES.get(row["split_type"], row["split_type"])
+
+                    bm_info = ""
+                    bm_val  = row.get("budget_month")
+                    by_val  = row.get("budget_year")
+                    if bm_val is not None and not (isinstance(bm_val, float) and pd.isna(bm_val)):
+                        bm_label = db.MONTHS_ES.get(int(bm_val), "?")
+                        bm_info  = f" · <span style='color:#3182ce;font-size:10px'>📅 Presup. {bm_label} {int(by_val)}</span>"
+
+                    notes_html = f"<br><small style='color:#aaa'>{row['notes']}</small>" if row.get("notes") else ""
+
+                    c_desc, c_tag, c_who, c_amt, c_edit, c_del = st.columns([3.5, 2, 1, 1.2, 0.4, 0.4])
+                    c_desc.markdown(
+                        f"**{row['description']}**"
+                        f"<br><small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
+                        f"{notes_html}",
+                        unsafe_allow_html=True,
+                    )
+                    c_tag.markdown(
+                        f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    c_who.markdown(f"**{row['payer']}**")
+                    c_amt.markdown(f"**${row['amount']:,.0f}**")
+                    if c_edit.button("✏️", key=f"edit_e_{row_id}", help="Editar"):
+                        st.session_state["edit_expense_id"] = row_id
+                        st.rerun()
+                    if c_del.button("🗑", key=f"del_e_{row_id}", help="Eliminar"):
+                        db.delete_expense(row_id)
+                        _clear_cache(); st.rerun()
+
                 st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
 
