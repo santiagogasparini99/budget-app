@@ -33,8 +33,7 @@ def _manual_debts():      return db.get_manual_debts(only_pending=True)
 def _categories():        return db.get_categories()
 
 def _clear_cache():
-    _expenses.clear(); _budgets.clear(); _spending.clear()
-    _balance.clear();  _daily.clear();   _settlements.clear()
+    _expenses.clear(); _budgets.clear(); _settlements.clear()
     _manual_debts.clear(); _categories.clear()
 
 st.set_page_config(
