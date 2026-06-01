@@ -70,16 +70,16 @@ st.markdown("""
   .main .block-container { padding-top: 1rem; padding-bottom: 2rem; }
 
   div[data-testid="stMetric"] {
-    background: #ffffff;
+    background: #1e2130;
     border-radius: 12px;
     padding: .9rem 1.1rem;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+    box-shadow: 0 1px 8px rgba(0,0,0,0.4);
     border-top: 3px solid #667eea;
   }
 
   .sec-head {
-    font-size: .95rem; font-weight: 700; color: #2d3748;
-    border-bottom: 2px solid #e8f0fe;
+    font-size: .95rem; font-weight: 700; color: #a0aec0;
+    border-bottom: 2px solid #2d3748;
     padding-bottom: 5px; margin-bottom: 10px;
   }
 
@@ -88,17 +88,18 @@ st.markdown("""
     font-size: 1.05rem; font-weight: 700;
     text-align: center; margin-bottom: .8rem;
   }
-  .debt-owe  { background:#fff5f5; border:2px solid #fc8181; color:#c53030; }
-  .debt-even { background:#f0fff4; border:2px solid #68d391; color:#276749; }
-  .debt-recv { background:#ebf8ff; border:2px solid #63b3ed; color:#2b6cb0; }
+  .debt-owe  { background:#2d1515; border:2px solid #fc8181; color:#fc8181; }
+  .debt-even { background:#1a2e22; border:2px solid #68d391; color:#68d391; }
+  .debt-recv { background:#152233; border:2px solid #63b3ed; color:#63b3ed; }
 
   .badge {
     display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600;
   }
 
-  /* Pill filter */
   div[data-testid="stRadio"] > div { flex-direction: row !important; gap: 8px; }
   div[data-testid="stRadio"] label { cursor: pointer; }
+
+  hr { border-color: #2d3748 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,7 +141,7 @@ with st.sidebar:
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
 tab_dash, tab_gastos, tab_presup, tab_deudas, tab_ahorros = st.tabs(
-    ["📊  Dashboard", "💸  Presupuesto", "📋  Configuración", "🤝  Deudas", "💰  Ahorros"]
+    ["📊  Dashboard", "💸  Movimientos", "📋  Presupuesto", "🤝  Deudas", "💰  Ahorros"]
 )
 
 
