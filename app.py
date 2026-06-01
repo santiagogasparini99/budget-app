@@ -13,13 +13,21 @@ def _expenses(m, y):      return db.get_expenses(month=m, year=y)
 def _budgets(m, y):       return db.get_budgets(month=m, year=y)
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _spending(m, y):      return db.calculate_spending_by_person_category(month=m, year=y)
+def _spending(m, y):
+    exp = _expenses(m, y)
+    return db.calculate_spending_by_person_category(m, y, expenses=exp)
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _balance(m, y):       return db.calculate_debt_balance(month=m, year=y)
+def _balance(m, y):
+    exp  = _expenses(m, y) if m is not None else None
+    sett = _settlements(m, y) if m is not None else None
+    man  = _manual_debts()
+    return db.calculate_debt_balance(m, y, expenses=exp, settlements=sett, manual=man)
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _daily(m, y):         return db.get_daily_spending(month=m, year=y)
+def _daily(m, y):
+    exp = _expenses(m, y)
+    return db.get_daily_spending(m, y, expenses=exp)
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _settlements(m, y):   return db.get_settlements(month=m, year=y)

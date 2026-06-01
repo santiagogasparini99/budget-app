@@ -118,7 +118,12 @@ def _df(conn, sql: str, params=()) -> pd.DataFrame:
 
 
 # ─── Init ─────────────────────────────────────────────────────────────────────
+_db_initialized = False
+
 def init_db():
+    global _db_initialized
+    if _db_initialized:
+        return
     with get_conn() as conn:
         _run(conn, """
             CREATE TABLE IF NOT EXISTS categories (
@@ -190,6 +195,7 @@ def init_db():
             _run(conn,
                  "INSERT INTO categories (name, color) VALUES (%s, %s) ON CONFLICT (name) DO NOTHING",
                  (name, color))
+    _db_initialized = True
 
 
 # ─── Categories ───────────────────────────────────────────────────────────────
@@ -390,8 +396,10 @@ def delete_manual_debt(debt_id: int):
 
 
 # ─── Analytics ────────────────────────────────────────────────────────────────
-def calculate_spending_by_person_category(month: int, year: int) -> pd.DataFrame:
-    expenses = get_expenses(month=month, year=year)
+def calculate_spending_by_person_category(month: int, year: int,
+                                           expenses: pd.DataFrame = None) -> pd.DataFrame:
+    if expenses is None:
+        expenses = get_expenses(month=month, year=year)
     if expenses.empty:
         return pd.DataFrame(columns=["category_id", "category_name", "color", "person", "spent"])
 
@@ -413,12 +421,15 @@ def calculate_spending_by_person_category(month: int, year: int) -> pd.DataFrame
     return df.groupby(["category_id", "category_name", "color", "person"])["spent"].sum().reset_index()
 
 
-def calculate_debt_balance(month: int = None, year: int = None) -> float:
+def calculate_debt_balance(month: int = None, year: int = None,
+                            expenses: pd.DataFrame = None,
+                            settlements: pd.DataFrame = None,
+                            manual: pd.DataFrame = None) -> float:
     """Positive = AZ owes SG.  Negative = SG owes AZ."""
-    expenses    = get_expenses(month=month, year=year)
-    settlements = get_settlements(month=month, year=year)
-    manual      = get_manual_debts(only_pending=True)
-    balance     = 0.0
+    if expenses    is None: expenses    = get_expenses(month=month, year=year)
+    if settlements is None: settlements = get_settlements(month=month, year=year)
+    if manual      is None: manual      = get_manual_debts(only_pending=True)
+    balance = 0.0
 
     if not expenses.empty:
         active = expenses[expenses["is_reconciled"].fillna(0) != 1]
@@ -449,8 +460,9 @@ def calculate_debt_balance(month: int = None, year: int = None) -> float:
     return balance
 
 
-def get_daily_spending(month: int, year: int) -> pd.DataFrame:
-    expenses = get_expenses(month=month, year=year)
+def get_daily_spending(month: int, year: int, expenses: pd.DataFrame = None) -> pd.DataFrame:
+    if expenses is None:
+        expenses = get_expenses(month=month, year=year)
     if expenses.empty:
         return pd.DataFrame(columns=["date", "person", "amount"])
 
