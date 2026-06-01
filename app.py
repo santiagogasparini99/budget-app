@@ -377,7 +377,7 @@ with tab_dash:
                     fig_pie = px.pie(
                         values=cat_totals.values, names=cat_totals.index,
                         hole=0.42,
-                        color_discrete_sequence=px.colors.qualitative.Dark24,
+                        color_discrete_sequence=px.colors.qualitative.Safe,
                     )
                     fig_pie.update_layout(
                         height=270, margin=dict(l=0, r=0, t=10, b=0),
@@ -436,32 +436,26 @@ with tab_dash:
     else:
         rate_sg = rate_az = 0.0
 
-    # Build 13-point projection (current month + 12 ahead)
-    proj_months, proj_sg, proj_az = [], [], []
+    # Build 13-point projection — combined SG + AZ
+    rate_total  = rate_sg + rate_az
+    bal_total   = bal_sg + bal_az
+    proj_months, proj_total = [], []
     now = datetime.now()
     for i in range(13):
         m = ((now.month - 1 + i) % 12) + 1
         y = now.year + (now.month - 1 + i) // 12
         proj_months.append(f"{db.MONTHS_ES[m][:3]} {y}")
-        proj_sg.append(bal_sg + rate_sg * i)
-        proj_az.append(bal_az + rate_az * i)
+        proj_total.append(bal_total + rate_total * i)
 
     fig_proj = go.Figure()
     fig_proj.add_trace(go.Scatter(
-        x=proj_months, y=proj_sg, name=f"Santiago (${rate_sg:,.0f}/mes)",
+        x=proj_months, y=proj_total,
+        name=f"Total SG + AZ (${rate_total:,.0f}/mes)",
         mode="lines+markers",
-        line=dict(color="#667eea", width=3, dash="solid"),
-        marker=dict(size=6),
-        fill="tozeroy", fillcolor="rgba(102,126,234,0.12)",
-        hovertemplate="<b>Santiago</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
-    ))
-    fig_proj.add_trace(go.Scatter(
-        x=proj_months, y=proj_az, name=f"Alex (${rate_az:,.0f}/mes)",
-        mode="lines+markers",
-        line=dict(color="#48bb78", width=3, dash="dot"),
-        marker=dict(size=6, symbol="diamond"),
-        fill="tozeroy", fillcolor="rgba(72,187,120,0.12)",
-        hovertemplate="<b>Alex</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
+        line=dict(color="#667eea", width=3),
+        marker=dict(size=7),
+        fill="tozeroy", fillcolor="rgba(102,126,234,0.15)",
+        hovertemplate="<b>Total Ahorros</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
     ))
     fig_proj.update_layout(
         height=280, margin=dict(l=0, r=0, t=20, b=0),
