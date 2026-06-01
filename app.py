@@ -256,43 +256,35 @@ with tab_dash:
 
     st.divider()
 
-    # ── KPI cards ─────────────────────────────────────────────────────────────
+    # ── KPI cards — una fila por Santiago, Alex y Ambos ──────────────────────
     FUN_CATS = ["Salidas a comer", "Bares", "Café", "Cultura"]
 
-    n_cols   = len(persons_dash) * 3 + 3   # +3 for the shared "Diversión" card
-    kpi_cols = st.columns(n_cols)
-    col_idx  = 0
-    for person in persons_dash:
-        name   = db.PERSON_NAMES[person]
-        budget = budgets_df[f"budget_{person}"].sum() if not budgets_df.empty else 0.0
-        spent  = (
-            spending_df[spending_df["person"] == person]["spent"].sum()
-            if not spending_df.empty else 0.0
-        )
-        remaining = budget - spent
-        kpi_cols[col_idx].metric(f"💼 Presupuesto {name}", f"${budget:,.0f}")
-        kpi_cols[col_idx + 1].metric(f"💸 Gastado {name}", f"${spent:,.0f}")
-        kpi_cols[col_idx + 2].metric(f"✅ Restante {name}", f"${remaining:,.0f}")
-        col_idx += 3
+    kpi_rows = [("Santiago", ["SG"]), ("Alex", ["AZ"]), ("Ambos", ["SG", "AZ"])]
+    for row_label, row_persons in kpi_rows:
+        budget = (sum(budgets_df[f"budget_{p}"].sum() for p in row_persons)
+                  if not budgets_df.empty else 0.0)
+        spent  = (spending_df[spending_df["person"].isin(row_persons)]["spent"].sum()
+                  if not spending_df.empty else 0.0)
+        rem    = budget - spent
 
-    # Fun budget card (Salidas a comer + Bares + Café + Cultura)
-    if not budgets_df.empty:
-        fun_bdf = budgets_df[budgets_df["category_name"].isin(FUN_CATS)]
-        fun_budget = sum(fun_bdf[f"budget_{p}"].sum() for p in persons_dash)
-        fun_spent  = (
-            spending_df[
-                spending_df["person"].isin(persons_dash) &
-                spending_df["category_name"].isin(FUN_CATS)
-            ]["spent"].sum() if not spending_df.empty else 0.0
-        )
+        fun_bdf    = budgets_df[budgets_df["category_name"].isin(FUN_CATS)] if not budgets_df.empty else budgets_df
+        fun_budget = sum(fun_bdf[f"budget_{p}"].sum() for p in row_persons) if not fun_bdf.empty else 0.0
+        fun_spent  = (spending_df[
+                          spending_df["person"].isin(row_persons) &
+                          spending_df["category_name"].isin(FUN_CATS)
+                      ]["spent"].sum() if not spending_df.empty else 0.0)
         fun_rem = fun_budget - fun_spent
-        kpi_cols[col_idx].metric("🎉 Presupuesto Diversión", f"${fun_budget:,.0f}")
-        kpi_cols[col_idx + 1].metric("🎉 Gastado Diversión", f"${fun_spent:,.0f}")
-        kpi_cols[col_idx + 2].metric(
-            "🎉 Restante Diversión", f"${fun_rem:,.0f}",
-            delta=f"${fun_rem:,.0f}",
-            delta_color="normal" if fun_rem >= 0 else "inverse",
-        )
+
+        st.markdown(f"**{row_label}**")
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        c1.metric("💼 Presupuesto",      f"${budget:,.0f}")
+        c2.metric("💸 Gastado",          f"${spent:,.0f}")
+        c3.metric("✅ Restante",         f"${rem:,.0f}")
+        c4.metric("🎉 Presup. Diversión", f"${fun_budget:,.0f}")
+        c5.metric("🎉 Gastado Diversión", f"${fun_spent:,.0f}")
+        c6.metric("🎉 Restante Diversión", f"${fun_rem:,.0f}",
+                  delta=f"${fun_rem:,.0f}",
+                  delta_color="normal" if fun_rem >= 0 else "inverse")
 
     # Debt chip
     st.markdown("")
