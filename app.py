@@ -283,9 +283,7 @@ with tab_dash:
         c3.metric("✅ Restante",         f"${rem:,.0f}")
         c4.metric("🎉 Presup. Diversión", f"${fun_budget:,.0f}")
         c5.metric("🎉 Gastado Diversión", f"${fun_spent:,.0f}")
-        c6.metric("🎉 Restante Diversión", f"${fun_rem:,.0f}",
-                  delta=f"${fun_rem:,.0f}",
-                  delta_color="normal" if fun_rem >= 0 else "inverse")
+        c6.metric("🎉 Restante Diversión", f"${fun_rem:,.0f}")
 
     # Debt chip
     st.markdown("")
@@ -478,6 +476,29 @@ with tab_gastos:
         cats_df       = _categories()
         cat_name_to_id = dict(zip(cats_df["name"], cats_df["id"]))
 
+        # Split type fuera del form para que el caption reaccione al cambio
+        _SPLIT_CAPTIONS = {
+            "personal":  "Solo cuenta para quien pagó.",
+            "shared":    "Se divide 50/50 en el presupuesto de cada uno.",
+            "for_other": "Lo pagó uno, pero es gasto del otro.",
+            "custom":    "Elegí qué porcentaje paga el otro.",
+        }
+        new_split_type = st.selectbox(
+            "Tipo de gasto", list(db.SPLIT_TYPES.keys()),
+            format_func=lambda x: db.SPLIT_TYPES[x],
+            key="new_exp_split_type",
+        )
+        st.caption(_SPLIT_CAPTIONS[new_split_type])
+        new_split_pct = None
+        if new_split_type == "custom":
+            new_split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
+                                      key="new_exp_split_pct",
+                                      help="Ej: 30 → el otro paga el 30%, vos el 70%")
+
+        st.caption(f"📅 Se asignará al presupuesto de **{db.MONTHS_ES[M]} {Y}**")
+
+        SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+
         with st.form("new_expense", clear_on_submit=True):
             description = st.text_input("Descripción", placeholder="Ej: Almuerzo, Supermercado…")
 
@@ -490,74 +511,51 @@ with tab_gastos:
             amount       = c3.number_input("Monto ($)", min_value=0.0, value=None, step=1.0, format="%.2f")
             expense_date = c4.date_input("Fecha real", value=date.today())
 
-            split_type = st.selectbox(
-                "Tipo de gasto", list(db.SPLIT_TYPES.keys()),
-                format_func=lambda x: db.SPLIT_TYPES[x],
-            )
-            split_pct = None
-            captions = {
-                "personal":  "Solo cuenta para quien pagó.",
-                "shared":    "Se divide 50/50 en el presupuesto de cada uno.",
-                "for_other": "Lo pagó uno, pero es gasto del otro.",
-                "custom":    "Elegí qué porcentaje paga el otro.",
-            }
-            st.caption(captions[split_type])
-            if split_type == "custom":
-                split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
-                                      help="Ej: 30 → el otro paga el 30%, vos el 70%")
-
-            # Budget month override
-            override = st.checkbox(
-                "📅 Asignar a un mes de presupuesto diferente",
-                help="Útil cuando el gasto es de fines de mes pero corresponde al presupuesto del mes siguiente.",
-            )
-            bm, by = None, None
-            if override:
-                co1, co2 = st.columns(2)
-                bm_name = co1.selectbox("Mes presupuesto", month_names, index=M - 1, key="bm_sel")
-                by      = co2.selectbox("Año presupuesto", years, index=years.index(Y), key="by_sel")
-                bm      = months_inv[bm_name]
-
             notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…")
 
-            SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
             if cat_name in SAVINGS_CATS:
                 st.info("💰 Esta categoría también agregará el monto a Ahorros automáticamente.")
 
             if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
+                split_type_val = st.session_state.get("new_exp_split_type", "personal")
+                split_pct_val  = st.session_state.get("new_exp_split_pct") if split_type_val == "custom" else None
+
                 if not description.strip():
                     st.error("La descripción es requerida.")
                 elif amount is None or amount <= 0:
                     st.error("El monto debe ser mayor a $0.")
                 else:
+                    # Auto budget month: si la fecha real no coincide con el mes del sidebar, asignar al sidebar
+                    bm = M if (expense_date.month != M or expense_date.year != Y) else None
+                    by = Y if bm is not None else None
+
                     new_exp_id = db.add_expense(
                         description.strip(),
                         cat_name_to_id[cat_name],
                         payer,
                         float(amount),
-                        split_type,
+                        split_type_val,
                         expense_date.isoformat(),
                         notes.strip() or None,
                         budget_month=bm,
                         budget_year=by,
-                        split_pct=float(split_pct) if split_pct is not None else None,
+                        split_pct=float(split_pct_val) if split_pct_val is not None else None,
                     )
-                    # Auto-deposit to Ahorros for savings categories (linked via expense_id)
                     if cat_name in SAVINGS_CATS:
                         amt    = float(amount)
                         desc_s = f"{cat_name}: {description.strip()}"
                         other  = "AZ" if payer == "SG" else "SG"
-                        opct   = (float(split_pct) / 100) if split_pct is not None else 0.5
-                        if split_type == "personal":
+                        opct   = (float(split_pct_val) / 100) if split_pct_val is not None else 0.5
+                        if split_type_val == "personal":
                             db.add_savings_entry(payer, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                        elif split_type == "shared":
+                        elif split_type_val == "shared":
                             db.add_savings_entry(payer, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                             db.add_savings_entry(other, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                        elif split_type == "for_other":
+                        elif split_type_val == "for_other":
                             db.add_savings_entry(other, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                        elif split_type == "custom":
+                        elif split_type_val == "custom":
                             db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                            db.add_savings_entry(other, amt * opct,       "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                            db.add_savings_entry(other, amt * opct,        "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                     st.success("✅ Gasto guardado!")
                     _clear_cache(); st.rerun()
 
@@ -724,7 +722,9 @@ with tab_gastos:
                         bm_label = db.MONTHS_ES.get(int(bm_val), "?")
                         bm_info  = f" · <span style='color:#3182ce;font-size:10px'>📅 Presup. {bm_label} {int(by_val)}</span>"
 
-                    notes_html = f"<br><small style='color:#aaa'>{row['notes']}</small>" if row.get("notes") else ""
+                    _nv = row.get("notes")
+                    notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
+                                  if _nv and isinstance(_nv, str) and _nv.strip() else "")
 
                     c_desc, c_tag, c_who, c_amt, c_edit, c_del = st.columns([3.5, 2, 1, 1.2, 0.4, 0.4])
                     c_desc.markdown(
