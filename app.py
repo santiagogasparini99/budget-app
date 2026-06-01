@@ -404,21 +404,14 @@ with tab_dash:
     sa2.metric("💰 Ahorros Alex",     f"${bal_az:,.0f}")
     sa3.metric("💰 Total Ahorros",    f"${bal_sg + bal_az:,.0f}")
 
-    # Proyección: tasa mensual = promedio de depósitos de los últimos 2 meses
-    def _monthly_rate(person):
-        if all_sv.empty: return 0.0
-        sv_p = all_sv[all_sv["person"] == person].copy()
-        if sv_p.empty: return 0.0
-        sv_p["dt"] = pd.to_datetime(sv_p["date"])
-        sv_p["net"] = sv_p.apply(
-            lambda r: -float(r["amount"]) if r["entry_type"] in ("withdrawal","loss") else float(r["amount"]), axis=1
-        )
-        sv_p["ym"] = sv_p["dt"].dt.to_period("M")
-        monthly = sv_p.groupby("ym")["net"].sum()
-        return float(monthly.tail(2).mean()) if not monthly.empty else 0.0
-
-    rate_sg = _monthly_rate("SG")
-    rate_az = _monthly_rate("AZ")
+    # Proyección: tasa mensual = presupuesto de categorías de ahorro del mes seleccionado
+    PROJ_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+    if not budgets_df.empty:
+        proj_mask = budgets_df["category_name"].isin(PROJ_CATS)
+        rate_sg = float(budgets_df[proj_mask]["budget_SG"].sum())
+        rate_az = float(budgets_df[proj_mask]["budget_AZ"].sum())
+    else:
+        rate_sg = rate_az = 0.0
 
     # Build 13-point projection (current month + 12 ahead)
     proj_months, proj_sg, proj_az = [], [], []
@@ -453,7 +446,7 @@ with tab_dash:
         yaxis=dict(gridcolor="#f0f0f0", tickprefix="$"),
     )
     st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
-    st.caption(f"Proyección basada en tasa mensual promedio (últimos 2 meses) · "
+    st.caption(f"Proyección basada en presupuesto de Spain Move Fund + Emergency Savings + Viajes · "
                f"SG: ${rate_sg:,.0f}/mes · AZ: ${rate_az:,.0f}/mes")
 
 
