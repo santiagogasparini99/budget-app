@@ -1,7 +1,6 @@
 import io
 import os
 from contextlib import contextmanager
-from urllib.parse import urlparse, unquote
 import psycopg2
 import psycopg2.extras
 import pandas as pd
@@ -50,26 +49,36 @@ SPLIT_TYPES = {
 }
 
 
-def _get_db_url() -> str:
-    """Read connection URL from Streamlit secrets (cloud) or env var (local)."""
+def _get_db_params() -> dict:
     try:
         import streamlit as st
-        return st.secrets["DATABASE_URL"]
+        db = st.secrets["database"]
+        return {
+            "host":     db["host"],
+            "port":     int(db["port"]),
+            "dbname":   db["dbname"],
+            "user":     db["user"],
+            "password": db["password"],
+            "sslmode":  "require",
+        }
     except Exception:
-        return os.environ.get("DATABASE_URL", "")
+        # Fallback: parse DATABASE_URL env var
+        from urllib.parse import urlparse
+        url = os.environ.get("DATABASE_URL", "")
+        p = urlparse(url)
+        return {
+            "host":     p.hostname,
+            "port":     p.port or 5432,
+            "dbname":   p.path.lstrip("/"),
+            "user":     p.username or "",
+            "password": p.password or "",
+            "sslmode":  "require",
+        }
 
 
 @contextmanager
 def get_conn():
-    p = urlparse(_get_db_url())
-    conn = psycopg2.connect(
-        host=p.hostname,
-        port=p.port or 5432,
-        dbname=p.path.lstrip("/"),
-        user=unquote(p.username or ""),
-        password=unquote(p.password or ""),
-        sslmode="require",
-    )
+    conn = psycopg2.connect(**_get_db_params())
     try:
         yield conn
         conn.commit()
