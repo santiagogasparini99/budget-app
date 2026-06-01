@@ -185,6 +185,18 @@ def init_db():
             )
         """)
 
+        _run(conn, """
+            CREATE TABLE IF NOT EXISTS savings (
+                id          SERIAL PRIMARY KEY,
+                person      TEXT NOT NULL,
+                amount      REAL NOT NULL,
+                entry_type  TEXT NOT NULL DEFAULT 'deposit',
+                description TEXT NOT NULL,
+                date        TEXT NOT NULL,
+                created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Safe column migrations for existing databases
         for col, definition in [
             ("budget_month",  "INTEGER"),
@@ -529,6 +541,35 @@ def get_daily_spending(month: int, year: int, expenses: pd.DataFrame = None) -> 
     result = df.groupby(["date", "person"])["amount"].sum().reset_index()
     result["date"] = pd.to_datetime(result["date"])
     return result.sort_values("date")
+
+
+# ─── Savings ──────────────────────────────────────────────────────────────────
+def add_savings_entry(person: str, amount: float, entry_type: str, description: str, entry_date: str):
+    """entry_type: 'deposit' | 'previous' | 'withdrawal'"""
+    with get_conn() as conn:
+        _run(conn,
+             "INSERT INTO savings (person, amount, entry_type, description, date) VALUES (%s,%s,%s,%s,%s)",
+             (person, amount, entry_type, description, entry_date))
+
+
+def get_savings(person: str = None) -> pd.DataFrame:
+    with get_conn() as conn:
+        if person:
+            return _df(conn, "SELECT * FROM savings WHERE person=%s ORDER BY date DESC, created_at DESC", (person,))
+        return _df(conn, "SELECT * FROM savings ORDER BY date DESC, created_at DESC")
+
+
+def get_savings_balance(person: str) -> float:
+    with get_conn() as conn:
+        cur = _run(conn,
+                   "SELECT COALESCE(SUM(CASE WHEN entry_type='withdrawal' THEN -amount ELSE amount END),0) FROM savings WHERE person=%s",
+                   (person,))
+        return float(cur.fetchone()[0])
+
+
+def delete_savings_entry(entry_id: int):
+    with get_conn() as conn:
+        _run(conn, "DELETE FROM savings WHERE id=%s", (entry_id,))
 
 
 # ─── Excel Export ─────────────────────────────────────────────────────────────

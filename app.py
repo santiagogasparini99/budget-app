@@ -145,8 +145,8 @@ with st.sidebar:
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_dash, tab_gastos, tab_presup, tab_deudas = st.tabs(
-    ["📊  Dashboard", "💸  Gastos", "📋  Presupuesto", "🤝  Deudas"]
+tab_dash, tab_gastos, tab_presup, tab_deudas, tab_ahorros = st.tabs(
+    ["📊  Dashboard", "💸  Gastos", "📋  Presupuesto", "🤝  Deudas", "💰  Ahorros"]
 )
 
 
@@ -807,3 +807,80 @@ with tab_deudas:
                     db.delete_settlement(int(row["id"]))
                     _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TAB 5 · AHORROS
+# ══════════════════════════════════════════════════════════════════════════════
+with tab_ahorros:
+    st.markdown("## 💰 Ahorros")
+
+    ENTRY_LABELS = {"deposit": "Depósito", "previous": "Ahorro previo", "withdrawal": "Retiro"}
+    ENTRY_COLORS = {"deposit": "#38a169", "previous": "#3182ce", "withdrawal": "#e53e3e"}
+
+    col_sg, col_az = st.columns(2, gap="large")
+
+    for person, col in [("SG", col_sg), ("AZ", col_az)]:
+        name    = db.PERSON_NAMES[person]
+        balance = db.get_savings_balance(person)
+        entries = db.get_savings(person)
+
+        with col:
+            st.markdown(f"### {name}")
+            st.metric("💰 Saldo actual", f"${balance:,.0f}")
+
+            st.markdown("")
+
+            # ── Formulario ────────────────────────────────────────────────────
+            with st.expander("➕ Agregar movimiento"):
+                with st.form(f"savings_form_{person}", clear_on_submit=True):
+                    sv_type = st.selectbox(
+                        "Tipo", list(ENTRY_LABELS.keys()),
+                        format_func=lambda x: ENTRY_LABELS[x],
+                        key=f"sv_type_{person}",
+                    )
+                    sv_desc   = st.text_input("Descripción *",
+                                              placeholder="Ej: Ahorro mensual, Retiro viaje…",
+                                              key=f"sv_desc_{person}")
+                    sv_amount = st.number_input("Monto ($) *", min_value=0.01, value=None,
+                                                step=1.0, format="%.2f", key=f"sv_amt_{person}")
+                    sv_date   = st.date_input("Fecha", value=date.today(), key=f"sv_date_{person}")
+
+                    if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
+                        if not sv_desc.strip():
+                            st.error("La descripción es requerida.")
+                        elif sv_amount is None or sv_amount <= 0:
+                            st.error("El monto debe ser mayor a $0.")
+                        else:
+                            db.add_savings_entry(person, float(sv_amount), sv_type,
+                                                 sv_desc.strip(), sv_date.isoformat())
+                            st.success("✅ Movimiento guardado!")
+                            st.rerun()
+
+            # ── Historial ─────────────────────────────────────────────────────
+            st.markdown('<div class="sec-head">Historial</div>', unsafe_allow_html=True)
+            if entries.empty:
+                st.caption("Sin movimientos.")
+            else:
+                for _, row in entries.iterrows():
+                    etype = row.get("entry_type", "deposit")
+                    color = ENTRY_COLORS.get(etype, "#888")
+                    label = ENTRY_LABELS.get(etype, etype)
+                    sign  = "-" if etype == "withdrawal" else "+"
+                    c1, c2, c3 = st.columns([3.5, 1.5, 0.5])
+                    c1.markdown(
+                        f"**{row['description']}**<br>"
+                        f"<small style='color:#888'>{row['date']} · "
+                        f"<span style='color:{color}'>{label}</span></small>",
+                        unsafe_allow_html=True,
+                    )
+                    c2.markdown(
+                        f"<span style='color:{color};font-weight:700'>"
+                        f"{sign}${row['amount']:,.0f}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    if c3.button("🗑", key=f"del_sv_{row['id']}", help="Eliminar"):
+                        db.delete_savings_entry(int(row["id"]))
+                        st.rerun()
+                    st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>",
+                                unsafe_allow_html=True)
