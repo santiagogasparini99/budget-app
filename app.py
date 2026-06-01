@@ -51,8 +51,8 @@ def _clear_cache():
     _manual_debts.clear(); _categories.clear()
 
 st.set_page_config(
-    page_title="Budget Tracker · SG & AZ",
-    page_icon="💰",
+    page_title="El Plan de los Bichos · SG & AZ",
+    page_icon="🐝",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -105,7 +105,7 @@ st.markdown("""
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 💰 Budget Tracker")
+    st.markdown("## 🐝🪲 El Plan de los Bichos")
     st.markdown("**Santiago & Alex**")
     st.divider()
 
