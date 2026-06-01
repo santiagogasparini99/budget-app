@@ -3,6 +3,7 @@ import os
 from contextlib import contextmanager
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import pandas as pd
 
 DEFAULT_CATEGORIES = [
