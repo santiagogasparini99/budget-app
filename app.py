@@ -941,7 +941,7 @@ def _deudas_panel(M: int, Y: int):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
                         _clear_cache(); st.rerun(scope="fragment")
                 else:
-                    if c3.button("Acumular →", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
+                    if c3.button("Acum. →", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
                         _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
