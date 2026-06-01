@@ -1,7 +1,9 @@
 import io
 import os
-import psycopg2
+import ssl
 from contextlib import contextmanager
+from urllib.parse import urlparse
+import pg8000.dbapi as pglib
 import pandas as pd
 
 DEFAULT_CATEGORIES = [
@@ -59,7 +61,16 @@ def _get_db_url() -> str:
 
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(_get_db_url())
+    url = _get_db_url()
+    parsed = urlparse(url)
+    conn = pglib.connect(
+        host=parsed.hostname,
+        port=parsed.port or 5432,
+        database=parsed.path.lstrip("/"),
+        user=parsed.username,
+        password=parsed.password,
+        ssl_context=ssl.create_default_context(),
+    )
     try:
         yield conn
         conn.commit()
@@ -174,7 +185,7 @@ def add_category(name: str, color: str = "#808080") -> tuple:
         with get_conn() as conn:
             _run(conn, "INSERT INTO categories (name, color) VALUES (%s, %s)", (name, color))
         return True, f'Categoría "{name}" creada.'
-    except (psycopg2.errors.UniqueViolation, psycopg2.IntegrityError):
+    except pglib.IntegrityError:
         return False, f'La categoría "{name}" ya existe.'
 
 
@@ -197,7 +208,7 @@ def update_category(cat_id: int, name: str, color: str) -> tuple:
         with get_conn() as conn:
             _run(conn, "UPDATE categories SET name=%s, color=%s WHERE id=%s", (name, color, cat_id))
         return True, f'Categoría actualizada a "{name}".'
-    except (psycopg2.errors.UniqueViolation, psycopg2.IntegrityError):
+    except pglib.IntegrityError:
         return False, f'Ya existe una categoría llamada "{name}".'
 
 
