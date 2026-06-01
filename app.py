@@ -12,7 +12,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-db.init_db()
+try:
+    db.init_db()
+except Exception as _db_err:
+    st.error(f"❌ Error de conexión a la base de datos:\n\n```\n{_db_err}\n```")
+    st.info("Verificá que el secret DATABASE_URL esté correctamente configurado en Streamlit Cloud.")
+    st.stop()
 
 # ─── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown("""
