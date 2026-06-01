@@ -424,6 +424,10 @@ with tab_gastos:
 
             notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…")
 
+            SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+            if cat_name in SAVINGS_CATS:
+                st.info("💰 Esta categoría también agregará el monto a Ahorros automáticamente.")
+
             if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
                 if not description.strip():
                     st.error("La descripción es requerida.")
@@ -442,6 +446,22 @@ with tab_gastos:
                         budget_year=by,
                         split_pct=float(split_pct) if split_pct is not None else None,
                     )
+                    # Auto-deposit to Ahorros for savings categories
+                    if cat_name in SAVINGS_CATS:
+                        amt    = float(amount)
+                        desc_s = f"{cat_name}: {description.strip()}"
+                        other  = "AZ" if payer == "SG" else "SG"
+                        opct   = (float(split_pct) / 100) if split_pct is not None else 0.5
+                        if split_type == "personal":
+                            db.add_savings_entry(payer, amt, "deposit", desc_s, expense_date.isoformat())
+                        elif split_type == "shared":
+                            db.add_savings_entry(payer,  amt * 0.5, "deposit", desc_s, expense_date.isoformat())
+                            db.add_savings_entry(other,  amt * 0.5, "deposit", desc_s, expense_date.isoformat())
+                        elif split_type == "for_other":
+                            db.add_savings_entry(other, amt, "deposit", desc_s, expense_date.isoformat())
+                        elif split_type == "custom":
+                            db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat())
+                            db.add_savings_entry(other, amt * opct,       "deposit", desc_s, expense_date.isoformat())
                     st.success("✅ Gasto guardado!")
                     _clear_cache(); st.rerun()
 
