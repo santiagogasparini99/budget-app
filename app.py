@@ -257,11 +257,11 @@ with tab_dash:
 
         kpi_cols[col_idx].metric(f"💼 Presupuesto {name}", f"${budget:,.0f}")
         kpi_cols[col_idx + 1].metric(
-            f"💸 Gastado {name}", f"${spent:,.2f}",
-            delta=f"${remaining:,.2f} restante",
+            f"💸 Gastado {name}", f"${spent:,.0f}",
+            delta=f"${remaining:,.0f} restante",
             delta_color="normal" if remaining >= 0 else "inverse",
         )
-        kpi_cols[col_idx + 2].metric(f"✅ Restante {name}", f"${remaining:,.2f}")
+        kpi_cols[col_idx + 2].metric(f"✅ Restante {name}", f"${remaining:,.0f}")
         col_idx += 3
 
     # Debt chip
@@ -382,11 +382,17 @@ with tab_gastos:
                 "Tipo de gasto *", list(db.SPLIT_TYPES.keys()),
                 format_func=lambda x: db.SPLIT_TYPES[x],
             )
-            st.caption({
+            split_pct = None
+            captions = {
                 "personal":  "Solo cuenta para quien pagó.",
                 "shared":    "Se divide 50/50 en el presupuesto de cada uno.",
                 "for_other": "Lo pagó uno, pero es gasto del otro.",
-            }[split_type])
+                "custom":    "Elegí qué porcentaje paga el otro.",
+            }
+            st.caption(captions[split_type])
+            if split_type == "custom":
+                split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
+                                      help="Ej: 30 → el otro paga el 30%, vos el 70%")
 
             # Budget month override
             override = st.checkbox(
@@ -418,6 +424,7 @@ with tab_gastos:
                         notes.strip() or None,
                         budget_month=bm,
                         budget_year=by,
+                        split_pct=float(split_pct) if split_pct is not None else None,
                     )
                     st.success("✅ Gasto guardado!")
                     _clear_cache(); st.rerun()

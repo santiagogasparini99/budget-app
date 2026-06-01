@@ -44,9 +44,10 @@ MONTHS_ES = {
 }
 
 SPLIT_TYPES = {
-    "personal": "Personal",
-    "shared": "Compartido (50/50)",
+    "personal":  "Personal",
+    "shared":    "Compartido (50/50)",
     "for_other": "Para el otro",
+    "custom":    "% Personalizado",
 }
 
 
@@ -189,6 +190,7 @@ def init_db():
             ("budget_month",  "INTEGER"),
             ("budget_year",   "INTEGER"),
             ("is_reconciled", "INTEGER DEFAULT 0"),
+            ("split_pct",     "REAL"),
         ]:
             _run(conn, f"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS {col} {definition}")
 
@@ -298,13 +300,14 @@ def add_expense(
     notes: str = None,
     budget_month: int = None,
     budget_year: int = None,
+    split_pct: float = None,
 ):
     with get_conn() as conn:
         _run(conn, """
             INSERT INTO expenses
-              (description, category_id, payer, amount, split_type, date, notes, budget_month, budget_year)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (description, category_id, payer, amount, split_type, expense_date, notes, budget_month, budget_year))
+              (description, category_id, payer, amount, split_type, date, notes, budget_month, budget_year, split_pct)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (description, category_id, payer, amount, split_type, expense_date, notes, budget_month, budget_year, split_pct))
 
 
 def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
@@ -312,7 +315,7 @@ def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
         query = """
             SELECT e.id, e.description, e.payer, e.amount, e.split_type,
                    e.date, e.budget_month, e.budget_year, e.notes, e.created_at,
-                   e.is_reconciled,
+                   e.is_reconciled, e.split_pct,
                    c.id as category_id, c.name as category_name, c.color
             FROM expenses e
             JOIN categories c ON e.category_id = c.id
@@ -397,6 +400,17 @@ def delete_manual_debt(debt_id: int):
 
 
 # ─── Analytics ────────────────────────────────────────────────────────────────
+def _other_pct(exp) -> float:
+    """Fraction of the expense that the other person owes/pays."""
+    st = exp["split_type"]
+    if st == "shared":    return 0.5
+    if st == "for_other": return 1.0
+    if st == "custom":
+        v = exp.get("split_pct")
+        return float(v) / 100.0 if v is not None and not pd.isna(v) else 0.5
+    return 0.0  # personal
+
+
 def calculate_spending_by_person_category(month: int, year: int,
                                            expenses: pd.DataFrame = None) -> pd.DataFrame:
     if expenses is None:
@@ -406,17 +420,15 @@ def calculate_spending_by_person_category(month: int, year: int,
 
     rows = []
     for _, exp in expenses.iterrows():
-        cat = {"category_id": exp["category_id"], "category_name": exp["category_name"], "color": exp["color"]}
+        cat   = {"category_id": exp["category_id"], "category_name": exp["category_name"], "color": exp["color"]}
+        amt   = float(exp["amount"])
+        other = "AZ" if exp["payer"] == "SG" else "SG"
+        opct  = _other_pct(exp)
         if exp["split_type"] == "personal":
-            rows.append({**cat, "person": exp["payer"], "spent": float(exp["amount"])})
-        elif exp["split_type"] == "shared":
-            half  = float(exp["amount"]) / 2
-            other = "AZ" if exp["payer"] == "SG" else "SG"
-            rows.append({**cat, "person": exp["payer"], "spent": half})
-            rows.append({**cat, "person": other,        "spent": half})
-        elif exp["split_type"] == "for_other":
-            other = "AZ" if exp["payer"] == "SG" else "SG"
-            rows.append({**cat, "person": other, "spent": float(exp["amount"])})
+            rows.append({**cat, "person": exp["payer"], "spent": amt})
+        else:
+            rows.append({**cat, "person": exp["payer"], "spent": amt * (1 - opct)})
+            rows.append({**cat, "person": other,        "spent": amt * opct})
 
     df = pd.DataFrame(rows)
     return df.groupby(["category_id", "category_name", "color", "person"])["spent"].sum().reset_index()
@@ -426,20 +438,17 @@ def calculate_debt_balance(month: int = None, year: int = None,
                             expenses: pd.DataFrame = None,
                             settlements: pd.DataFrame = None,
                             manual: pd.DataFrame = None) -> float:
-    """Positive = AZ owes SG.  Negative = SG owes AZ."""
+    """Positive = AZ owes SG.  Negative = SG owes AZ.
+    Reconciled expenses still count — 'conciliar' is a visual marker only."""
     if expenses    is None: expenses    = get_expenses(month=month, year=year)
     if settlements is None: settlements = get_settlements(month=month, year=year)
     if manual      is None: manual      = get_manual_debts(only_pending=True)
     balance = 0.0
 
     if not expenses.empty:
-        active = expenses[expenses["is_reconciled"].fillna(0) != 1]
-        for _, row in active.iterrows():
-            if row["split_type"] == "shared":
-                half = float(row["amount"]) / 2
-                balance += half if row["payer"] == "SG" else -half
-            elif row["split_type"] == "for_other":
-                amt = float(row["amount"])
+        for _, row in expenses.iterrows():
+            if row["split_type"] in ("shared", "for_other", "custom"):
+                amt  = float(row["amount"]) * _other_pct(row)
                 balance += amt if row["payer"] == "SG" else -amt
 
     if not manual.empty:
@@ -469,16 +478,14 @@ def get_daily_spending(month: int, year: int, expenses: pd.DataFrame = None) -> 
 
     rows = []
     for _, exp in expenses.iterrows():
+        amt   = float(exp["amount"])
+        other = "AZ" if exp["payer"] == "SG" else "SG"
+        opct  = _other_pct(exp)
         if exp["split_type"] == "personal":
-            rows.append({"date": exp["date"], "person": exp["payer"], "amount": float(exp["amount"])})
-        elif exp["split_type"] == "shared":
-            half  = float(exp["amount"]) / 2
-            other = "AZ" if exp["payer"] == "SG" else "SG"
-            rows.append({"date": exp["date"], "person": exp["payer"], "amount": half})
-            rows.append({"date": exp["date"], "person": other,        "amount": half})
-        elif exp["split_type"] == "for_other":
-            other = "AZ" if exp["payer"] == "SG" else "SG"
-            rows.append({"date": exp["date"], "person": other, "amount": float(exp["amount"])})
+            rows.append({"date": exp["date"], "person": exp["payer"], "amount": amt})
+        else:
+            rows.append({"date": exp["date"], "person": exp["payer"], "amount": amt * (1 - opct)})
+            rows.append({"date": exp["date"], "person": other,        "amount": amt * opct})
 
     df = pd.DataFrame(rows)
     result = df.groupby(["date", "person"])["amount"].sum().reset_index()
