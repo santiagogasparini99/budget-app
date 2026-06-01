@@ -140,7 +140,7 @@ with st.sidebar:
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
 tab_dash, tab_gastos, tab_presup, tab_deudas, tab_ahorros = st.tabs(
-    ["📊  Dashboard", "💸  Gastos", "📋  Presupuesto", "🤝  Deudas", "💰  Ahorros"]
+    ["📊  Dashboard", "💸  Presupuesto", "📋  Configuración", "🤝  Deudas", "💰  Ahorros"]
 )
 
 
@@ -511,7 +511,7 @@ with tab_gastos:
                 elif amount is None or amount <= 0:
                     st.error("El monto debe ser mayor a $0.")
                 else:
-                    db.add_expense(
+                    new_exp_id = db.add_expense(
                         description.strip(),
                         cat_name_to_id[cat_name],
                         payer,
@@ -523,22 +523,22 @@ with tab_gastos:
                         budget_year=by,
                         split_pct=float(split_pct) if split_pct is not None else None,
                     )
-                    # Auto-deposit to Ahorros for savings categories
+                    # Auto-deposit to Ahorros for savings categories (linked via expense_id)
                     if cat_name in SAVINGS_CATS:
                         amt    = float(amount)
                         desc_s = f"{cat_name}: {description.strip()}"
                         other  = "AZ" if payer == "SG" else "SG"
                         opct   = (float(split_pct) / 100) if split_pct is not None else 0.5
                         if split_type == "personal":
-                            db.add_savings_entry(payer, amt, "deposit", desc_s, expense_date.isoformat())
+                            db.add_savings_entry(payer, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                         elif split_type == "shared":
-                            db.add_savings_entry(payer,  amt * 0.5, "deposit", desc_s, expense_date.isoformat())
-                            db.add_savings_entry(other,  amt * 0.5, "deposit", desc_s, expense_date.isoformat())
+                            db.add_savings_entry(payer, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                            db.add_savings_entry(other, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                         elif split_type == "for_other":
-                            db.add_savings_entry(other, amt, "deposit", desc_s, expense_date.isoformat())
+                            db.add_savings_entry(other, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                         elif split_type == "custom":
-                            db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat())
-                            db.add_savings_entry(other, amt * opct,       "deposit", desc_s, expense_date.isoformat())
+                            db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                            db.add_savings_entry(other, amt * opct,       "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                     st.success("✅ Gasto guardado!")
                     _clear_cache(); st.rerun()
 

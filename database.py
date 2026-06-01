@@ -206,6 +206,7 @@ def init_db():
         ]:
             _run(conn, f"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS {col} {definition}")
         _run(conn, "ALTER TABLE settlements ADD COLUMN IF NOT EXISTS debt_type TEXT DEFAULT 'period'")
+        _run(conn, "ALTER TABLE savings ADD COLUMN IF NOT EXISTS expense_id INTEGER")
 
         for name, color in DEFAULT_CATEGORIES:
             _run(conn,
@@ -316,11 +317,13 @@ def add_expense(
     split_pct: float = None,
 ):
     with get_conn() as conn:
-        _run(conn, """
+        cur = _run(conn, """
             INSERT INTO expenses
               (description, category_id, payer, amount, split_type, date, notes, budget_month, budget_year, split_pct)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
         """, (description, category_id, payer, amount, split_type, expense_date, notes, budget_month, budget_year, split_pct))
+        return int(cur.fetchone()[0])
 
 
 def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
@@ -351,7 +354,8 @@ def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
 
 def delete_expense(expense_id: int):
     with get_conn() as conn:
-        _run(conn, "DELETE FROM expenses WHERE id=%s", (expense_id,))
+        _run(conn, "DELETE FROM savings  WHERE expense_id=%s", (expense_id,))
+        _run(conn, "DELETE FROM expenses WHERE id=%s",         (expense_id,))
 
 
 def reconcile_expense(expense_id: int, reconciled: bool = True):
@@ -544,12 +548,13 @@ def get_daily_spending(month: int, year: int, expenses: pd.DataFrame = None) -> 
 
 
 # ─── Savings ──────────────────────────────────────────────────────────────────
-def add_savings_entry(person: str, amount: float, entry_type: str, description: str, entry_date: str):
-    """entry_type: 'deposit' | 'previous' | 'withdrawal'"""
+def add_savings_entry(person: str, amount: float, entry_type: str, description: str,
+                      entry_date: str, expense_id: int = None):
+    """entry_type: 'deposit' | 'previous' | 'withdrawal' | 'return' | 'loss'"""
     with get_conn() as conn:
         _run(conn,
-             "INSERT INTO savings (person, amount, entry_type, description, date) VALUES (%s,%s,%s,%s,%s)",
-             (person, amount, entry_type, description, entry_date))
+             "INSERT INTO savings (person, amount, entry_type, description, date, expense_id) VALUES (%s,%s,%s,%s,%s,%s)",
+             (person, amount, entry_type, description, entry_date, expense_id))
 
 
 def get_savings(person: str = None) -> pd.DataFrame:
