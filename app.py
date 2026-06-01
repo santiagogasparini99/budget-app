@@ -370,6 +370,92 @@ with tab_dash:
     else:
         st.info("No hay gastos registrados para este mes. Empieza en la pestaña 💸 Gastos.")
 
+    st.divider()
+
+    # ── Dashboard Deudas ──────────────────────────────────────────────────────
+    st.markdown('<div class="sec-head">🤝 Resumen de Deudas</div>', unsafe_allow_html=True)
+    dd1, dd2, dd3 = st.columns(3)
+    period_bal = _period_balance(M, Y)
+    accum_bal  = _accum_balance()
+    total_bal  = period_bal + accum_bal
+
+    def _fmt_debt(val):
+        a = abs(val)
+        if val > 0.01:   return f"AZ → SG  ${a:,.0f}"
+        if val < -0.01:  return f"SG → AZ  ${a:,.0f}"
+        return "Sin deuda"
+
+    dd1.metric("📅 Deuda del período",   _fmt_debt(period_bal))
+    dd2.metric("📦 Deuda acumulada",      _fmt_debt(accum_bal))
+    dd3.metric("🔢 Total deuda",          _fmt_debt(total_bal))
+
+    st.divider()
+
+    # ── Dashboard Ahorros + Proyección ────────────────────────────────────────
+    st.markdown('<div class="sec-head">💰 Resumen de Ahorros y Proyección (12 meses)</div>',
+                unsafe_allow_html=True)
+
+    bal_sg = db.get_savings_balance("SG")
+    bal_az = db.get_savings_balance("AZ")
+    all_sv = db.get_savings()
+
+    sa1, sa2, sa3 = st.columns(3)
+    sa1.metric("💰 Ahorros Santiago", f"${bal_sg:,.0f}")
+    sa2.metric("💰 Ahorros Alex",     f"${bal_az:,.0f}")
+    sa3.metric("💰 Total Ahorros",    f"${bal_sg + bal_az:,.0f}")
+
+    # Proyección: tasa mensual = promedio de depósitos de los últimos 2 meses
+    def _monthly_rate(person):
+        if all_sv.empty: return 0.0
+        sv_p = all_sv[all_sv["person"] == person].copy()
+        if sv_p.empty: return 0.0
+        sv_p["dt"] = pd.to_datetime(sv_p["date"])
+        sv_p["net"] = sv_p.apply(
+            lambda r: -float(r["amount"]) if r["entry_type"] in ("withdrawal","loss") else float(r["amount"]), axis=1
+        )
+        sv_p["ym"] = sv_p["dt"].dt.to_period("M")
+        monthly = sv_p.groupby("ym")["net"].sum()
+        return float(monthly.tail(2).mean()) if not monthly.empty else 0.0
+
+    rate_sg = _monthly_rate("SG")
+    rate_az = _monthly_rate("AZ")
+
+    # Build 13-point projection (current month + 12 ahead)
+    proj_months, proj_sg, proj_az = [], [], []
+    now = datetime.now()
+    for i in range(13):
+        m = ((now.month - 1 + i) % 12) + 1
+        y = now.year + (now.month - 1 + i) // 12
+        proj_months.append(f"{db.MONTHS_ES[m][:3]} {y}")
+        proj_sg.append(bal_sg + rate_sg * i)
+        proj_az.append(bal_az + rate_az * i)
+
+    fig_proj = go.Figure()
+    fig_proj.add_trace(go.Scatter(
+        x=proj_months, y=proj_sg, name="Santiago",
+        mode="lines+markers", line=dict(color="#667eea", width=2),
+        fill="tozeroy", fillcolor="rgba(102,126,234,0.1)",
+        hovertemplate="<b>Santiago</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
+    ))
+    fig_proj.add_trace(go.Scatter(
+        x=proj_months, y=proj_az, name="Alex",
+        mode="lines+markers", line=dict(color="#f093fb", width=2),
+        fill="tozeroy", fillcolor="rgba(240,147,251,0.1)",
+        hovertemplate="<b>Alex</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
+    ))
+    fig_proj.add_vline(x=proj_months[0], line_dash="dot", line_color="#aaa",
+                       annotation_text="Hoy", annotation_position="top right")
+    fig_proj.update_layout(
+        height=280, margin=dict(l=0, r=0, t=20, b=0),
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", y=1.1),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(gridcolor="#f0f0f0", tickprefix="$"),
+    )
+    st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
+    st.caption(f"Proyección basada en tasa mensual promedio (últimos 2 meses) · "
+               f"SG: ${rate_sg:,.0f}/mes · AZ: ${rate_az:,.0f}/mes")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  TAB 2 · GASTOS
