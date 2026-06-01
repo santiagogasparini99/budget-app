@@ -461,19 +461,19 @@ with tab_gastos:
         cat_name_to_id = dict(zip(cats_df["name"], cats_df["id"]))
 
         with st.form("new_expense", clear_on_submit=True):
-            description = st.text_input("Descripción *", placeholder="Ej: Almuerzo, Supermercado…")
+            description = st.text_input("Descripción", placeholder="Ej: Almuerzo, Supermercado…")
 
             c1, c2 = st.columns(2)
-            cat_name = c1.selectbox("Categoría *", list(cat_name_to_id.keys()))
-            payer    = c2.selectbox("Pagó *", db.PERSONS,
+            cat_name = c1.selectbox("Categoría", list(cat_name_to_id.keys()))
+            payer    = c2.selectbox("Pagó", db.PERSONS,
                                     format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}")
 
             c3, c4 = st.columns(2)
-            amount       = c3.number_input("Monto ($) *", min_value=0.0, value=None, step=1.0, format="%.2f")
-            expense_date = c4.date_input("Fecha real *", value=date.today())
+            amount       = c3.number_input("Monto ($)", min_value=0.0, value=None, step=1.0, format="%.2f")
+            expense_date = c4.date_input("Fecha real", value=date.today())
 
             split_type = st.selectbox(
-                "Tipo de gasto *", list(db.SPLIT_TYPES.keys()),
+                "Tipo de gasto", list(db.SPLIT_TYPES.keys()),
                 format_func=lambda x: db.SPLIT_TYPES[x],
             )
             split_pct = None
@@ -677,7 +677,7 @@ with tab_presup:
     with cat_col_new:
         st.markdown("**Nueva categoría**")
         with st.form("new_category_form", clear_on_submit=True):
-            new_cat_name  = st.text_input("Nombre *", placeholder="Ej: Mascotas, Médico…")
+            new_cat_name  = st.text_input("Nombre", placeholder="Ej: Mascotas, Médico…")
             new_cat_color = st.color_picker("Color", value="#667eea")
             if st.form_submit_button("➕ Crear categoría", use_container_width=True, type="primary"):
                 ok, msg = db.add_category(new_cat_name, new_cat_color)
@@ -813,14 +813,14 @@ with tab_deudas:
 
         with st.expander("➕ Nueva deuda manual"):
             with st.form("manual_debt_form", clear_on_submit=True):
-                md_desc    = st.text_input("Descripción *", placeholder="Ej: Plata prestada…")
+                md_desc    = st.text_input("Descripción", placeholder="Ej: Plata prestada…")
                 md_c1, md_c2 = st.columns(2)
                 md_debtor  = md_c1.selectbox("Quien debe", db.PERSONS,
                                               format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
                                               key="md_debtor")
                 md_creditor_val = "AZ" if md_debtor == "SG" else "SG"
                 md_c2.markdown(f"**A quien:** {md_creditor_val} · {db.PERSON_NAMES[md_creditor_val]}")
-                md_amount  = st.number_input("Monto ($) *", min_value=0.01, value=None, step=1.0, format="%.2f", key="md_amt")
+                md_amount  = st.number_input("Monto ($)", min_value=0.01, value=None, step=1.0, format="%.2f", key="md_amt")
                 md_date    = st.date_input("Fecha", value=date.today(), key="md_date")
                 if st.form_submit_button("💾 Agregar", use_container_width=True, type="primary"):
                     if not md_desc.strip():
@@ -949,10 +949,10 @@ with tab_ahorros:
                         format_func=lambda x: ENTRY_LABELS[x],
                         key=f"sv_type_{person}",
                     )
-                    sv_desc   = st.text_input("Descripción *",
+                    sv_desc   = st.text_input("Descripción",
                                               placeholder="Ej: Ahorro mensual, Retiro viaje…",
                                               key=f"sv_desc_{person}")
-                    sv_amount = st.number_input("Monto ($) *", min_value=0.01, value=None,
+                    sv_amount = st.number_input("Monto ($)", min_value=0.01, value=None,
                                                 step=1.0, format="%.2f", key=f"sv_amt_{person}")
                     sv_date   = st.date_input("Fecha", value=date.today(), key=f"sv_date_{person}")
                     if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
@@ -973,10 +973,10 @@ with tab_ahorros:
                         format_func=lambda x: ENTRY_LABELS[x],
                         horizontal=True, key=f"rv_type_{person}",
                     )
-                    rv_desc   = st.text_input("Descripción *",
+                    rv_desc   = st.text_input("Descripción",
                                               placeholder="Ej: Rendimiento fondo, Ajuste mercado…",
                                               key=f"rv_desc_{person}")
-                    rv_amount = st.number_input("Monto ($) *", min_value=0.01, value=None,
+                    rv_amount = st.number_input("Monto ($)", min_value=0.01, value=None,
                                                 step=1.0, format="%.2f", key=f"rv_amt_{person}")
                     rv_date   = st.date_input("Fecha", value=date.today(), key=f"rv_date_{person}")
                     if st.form_submit_button("💾 Guardar rentabilidad", use_container_width=True, type="primary"):
