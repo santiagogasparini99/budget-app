@@ -877,8 +877,10 @@ with tab_presup:
 # ══════════════════════════════════════════════════════════════════════════════
 #  TAB 4 · DEUDAS
 # ══════════════════════════════════════════════════════════════════════════════
-with tab_deudas:
-    st.markdown(f"## 🤝 Deudas · {sel_month_name} {sel_year}")
+@st.fragment
+def _deudas_panel(M: int, Y: int):
+    month_name = db.MONTHS_ES[M]
+    st.markdown(f"## 🤝 Deudas · {month_name} {Y}")
 
     period_bal = _period_balance(M, Y)
     accum_bal  = _accum_balance()
@@ -888,7 +890,7 @@ with tab_deudas:
     kd1, kd2, kd3 = st.columns(3)
     with kd1:
         st.markdown("### Período")
-        st.markdown(debt_html(period_bal, f" · {sel_month_name}"), unsafe_allow_html=True)
+        st.markdown(debt_html(period_bal, f" · {month_name}"), unsafe_allow_html=True)
     with kd2:
         st.markdown("### Acumulada")
         st.markdown(debt_html(accum_bal, " · acumulada"), unsafe_allow_html=True)
@@ -900,9 +902,8 @@ with tab_deudas:
 
     col_shared, col_manual, col_pay = st.columns([2, 2, 1.4], gap="medium")
 
-    # ── Gastos compartidos del período ────────────────────────────────────────
     with col_shared:
-        st.markdown('<div class="sec-head">Gastos Período (Conciliar → pasan a Acumulada)</div>',
+        st.markdown('<div class="sec-head">Gastos del período con deuda (Pueden Acumularse)</div>',
                     unsafe_allow_html=True)
         exp_this   = _expenses(M, Y)
         shared_exp = (
@@ -938,16 +939,15 @@ with tab_deudas:
                 if reconciled:
                     if c3.button("↩ Período", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
-                        _clear_cache(); st.rerun()
+                        _clear_cache(); st.rerun(scope="fragment")
                 else:
-                    if c3.button("→ Acumular", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
+                    if c3.button("Acumular →", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
-                        _clear_cache(); st.rerun()
+                        _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
-    # ── Deudas manuales ───────────────────────────────────────────────────────
     with col_manual:
-        st.markdown('<div class="sec-head">Deudas Manuales (van a Acumulada)</div>',
+        st.markdown('<div class="sec-head">Deudas acumuladas</div>',
                     unsafe_allow_html=True)
 
         with st.expander("➕ Nueva deuda manual"):
@@ -970,7 +970,7 @@ with tab_deudas:
                         db.add_manual_debt(md_debtor, md_creditor_val, float(md_amount),
                                            md_desc.strip(), md_date.isoformat())
                         st.success("✅ Deuda registrada!")
-                        _clear_cache(); st.rerun()
+                        _clear_cache(); st.rerun(scope="fragment")
 
         if manual_df.empty:
             st.caption("Sin deudas manuales pendientes.")
@@ -987,13 +987,12 @@ with tab_deudas:
                 c2.markdown(f"**${row['amount']:,.0f}**")
                 if c3.button("✅", key=f"settle_md_{row['id']}", help="Marcar como saldada"):
                     db.settle_manual_debt(int(row["id"]))
-                    _clear_cache(); st.rerun()
+                    _clear_cache(); st.rerun(scope="fragment")
                 if c4.button("🗑", key=f"del_md_{row['id']}", help="Eliminar"):
                     db.delete_manual_debt(int(row["id"]))
-                    _clear_cache(); st.rerun()
+                    _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
-    # ── Registrar pago ────────────────────────────────────────────────────────
     with col_pay:
         st.markdown('<div class="sec-head">💳 Registrar Pago</div>', unsafe_allow_html=True)
 
@@ -1018,7 +1017,7 @@ with tab_deudas:
                 dt = "period" if s_debt_type == "Deuda del período" else "accumulated"
                 db.add_settlement(s_from, s_to_val, float(s_amount), s_desc, s_date.isoformat(), debt_type=dt)
                 st.success("✅ Pago registrado!")
-                _clear_cache(); st.rerun()
+                _clear_cache(); st.rerun(scope="fragment")
 
         st.markdown("")
         st.markdown('<div class="sec-head">Historial de Pagos</div>', unsafe_allow_html=True)
@@ -1038,8 +1037,12 @@ with tab_deudas:
                             unsafe_allow_html=True)
                 if c3.button("🗑", key=f"del_s_{row['id']}"):
                     db.delete_settlement(int(row["id"]))
-                    _clear_cache(); st.rerun()
+                    _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
+
+
+with tab_deudas:
+    _deudas_panel(M, Y)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
