@@ -76,9 +76,19 @@ def _get_db_params() -> dict:
         }
 
 
+_pool = None
+
+def _get_pool():
+    global _pool
+    if _pool is None or _pool.closed:
+        _pool = psycopg2.pool.ThreadedConnectionPool(1, 5, **_get_db_params())
+    return _pool
+
+
 @contextmanager
 def get_conn():
-    conn = psycopg2.connect(**_get_db_params())
+    pool = _get_pool()
+    conn = pool.getconn()
     try:
         yield conn
         conn.commit()
@@ -86,7 +96,10 @@ def get_conn():
         conn.rollback()
         raise
     finally:
-        conn.close()
+        try:
+            pool.putconn(conn)
+        except Exception:
+            pass
 
 
 def _run(conn, sql: str, params=()):

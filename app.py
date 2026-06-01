@@ -5,6 +5,36 @@ import plotly.express as px
 from datetime import datetime, date
 import database as db
 
+# ─── Cached DB reads (TTL 30s, cleared on any write) ─────────────────────────
+@st.cache_data(ttl=30, show_spinner=False)
+def _expenses(m, y):      return db.get_expenses(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _budgets(m, y):       return db.get_budgets(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _spending(m, y):      return db.calculate_spending_by_person_category(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _balance(m, y):       return db.calculate_debt_balance(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _daily(m, y):         return db.get_daily_spending(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _settlements(m, y):   return db.get_settlements(month=m, year=y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _manual_debts():      return db.get_manual_debts(only_pending=True)
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _categories():        return db.get_categories()
+
+def _clear_cache():
+    _expenses.clear(); _budgets.clear(); _spending.clear()
+    _balance.clear();  _daily.clear();   _settlements.clear()
+    _manual_debts.clear(); _categories.clear()
+
 st.set_page_config(
     page_title="Budget Tracker · SG & AZ",
     page_icon="💰",
@@ -187,10 +217,10 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
 #  TAB 1 · DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_dash:
-    expenses_df = db.get_expenses(month=M, year=Y)
-    budgets_df  = db.get_budgets(month=M, year=Y)
-    spending_df = db.calculate_spending_by_person_category(month=M, year=Y)
-    balance     = db.calculate_debt_balance(month=M, year=Y)
+    expenses_df = _expenses(M, Y)
+    budgets_df  = _budgets(M, Y)
+    spending_df = _spending(M, Y)
+    balance     = _balance(M, Y)
 
     # ── Person filter ─────────────────────────────────────────────────────────
     hdr, filter_col = st.columns([3, 2])
@@ -270,7 +300,7 @@ with tab_dash:
 
         with c_left:
             st.markdown('<div class="sec-head">Gastos Diarios</div>', unsafe_allow_html=True)
-            daily = db.get_daily_spending(month=M, year=Y)
+            daily = _daily(M, Y)
             if not daily.empty:
                 if len(persons_dash) < 2:
                     daily = daily[daily["person"] == persons_dash[0]]
@@ -332,7 +362,7 @@ with tab_gastos:
 
     with col_form:
         st.markdown('<div class="sec-head">➕ Nuevo Gasto</div>', unsafe_allow_html=True)
-        cats_df       = db.get_categories()
+        cats_df       = _categories()
         cat_name_to_id = dict(zip(cats_df["name"], cats_df["id"]))
 
         with st.form("new_expense", clear_on_submit=True):
@@ -389,13 +419,13 @@ with tab_gastos:
                         budget_year=by,
                     )
                     st.success("✅ Gasto guardado!")
-                    st.rerun()
+                    _clear_cache(); st.rerun()
 
     with col_list:
         st.markdown(f'<div class="sec-head">Gastos de {sel_month_name} {sel_year}</div>',
                     unsafe_allow_html=True)
 
-        expenses = db.get_expenses(month=M, year=Y)
+        expenses = _expenses(M, Y)
 
         if expenses.empty:
             st.info("No hay gastos registrados para este mes.")
@@ -458,7 +488,7 @@ with tab_gastos:
                 c_amt.markdown(f"**${row['amount']:,.2f}**")
                 if c_del.button("🗑", key=f"del_e_{row['id']}", help="Eliminar"):
                     db.delete_expense(int(row["id"]))
-                    st.rerun()
+                    _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
 
@@ -476,11 +506,11 @@ with tab_presup:
     if cp_col.button(f"📋 Copiar desde {prev_name} {prev_y}"):
         db.copy_budgets_from_month(prev_m, prev_y, M, Y)
         st.success(f"✅ Copiado desde {prev_name} {prev_y}")
-        st.rerun()
+        _clear_cache(); st.rerun()
 
     st.divider()
 
-    budgets_df = db.get_budgets(month=M, year=Y)
+    budgets_df = _budgets(M, Y)
     edit_df    = budgets_df[["category_name", "budget_SG", "budget_AZ"]].copy()
     edit_df    = edit_df.rename(columns={
         "category_name": "Categoría",
@@ -511,7 +541,7 @@ with tab_presup:
             db.set_budget(cat_id, "SG", float(row["Santiago (SG) $"]), M, Y)
             db.set_budget(cat_id, "AZ", float(row["Alex (AZ) $"]),    M, Y)
         st.success("✅ Presupuesto guardado!")
-        st.rerun()
+        _clear_cache(); st.rerun()
 
     st.divider()
 
@@ -529,13 +559,13 @@ with tab_presup:
                 ok, msg = db.add_category(new_cat_name, new_cat_color)
                 if ok:
                     st.success(msg)
-                    st.rerun()
+                    _clear_cache(); st.rerun()
                 else:
                     st.error(msg)
 
     with cat_col_list:
         st.markdown("**Categorías existentes**")
-        all_cats = db.get_categories()
+        all_cats = _categories()
         default_names = {c[0] for c in db.DEFAULT_CATEGORIES}
         edit_cat_id = st.session_state.get("edit_cat_id")
 
@@ -554,12 +584,12 @@ with tab_presup:
                     ok, msg = db.update_category(cat_id_int, new_name.strip(), new_color)
                     if ok:
                         st.session_state["edit_cat_id"] = None
-                        st.rerun()
+                        _clear_cache(); st.rerun()
                     else:
                         st.error(msg)
                 if ec4.button("✖", key=f"cancel_cat_{cat_id_int}", help="Cancelar"):
                     st.session_state["edit_cat_id"] = None
-                    st.rerun()
+                    _clear_cache(); st.rerun()
             else:
                 c1, c2, c3, c4 = st.columns([0.4, 2.8, 0.7, 0.7])
                 c1.markdown(
@@ -570,13 +600,13 @@ with tab_presup:
                 c2.markdown(cat["name"])
                 if c3.button("✏️", key=f"edit_cat_{cat_id_int}", help="Editar nombre y color"):
                     st.session_state["edit_cat_id"] = cat_id_int
-                    st.rerun()
+                    _clear_cache(); st.rerun()
                 if not is_default:
                     if c4.button("🗑", key=f"del_cat_{cat_id_int}", help="Eliminar categoría"):
                         ok, msg = db.delete_category(cat_id_int)
                         if ok:
                             st.success(msg)
-                            st.rerun()
+                            _clear_cache(); st.rerun()
                         else:
                             st.warning(msg)
 
@@ -587,9 +617,9 @@ with tab_presup:
 with tab_deudas:
     st.markdown(f"## 🤝 Deudas · {sel_month_name} {sel_year}")
 
-    balance     = db.calculate_debt_balance(month=M, year=Y)
-    balance_all = db.calculate_debt_balance()
-    manual_df   = db.get_manual_debts(only_pending=True)
+    balance     = _balance(M, Y)
+    balance_all = _balance(None, None)
+    manual_df   = _manual_debts()
 
     kd1, kd2 = st.columns(2)
     with kd1:
@@ -608,7 +638,7 @@ with tab_deudas:
     with col_shared:
         st.markdown('<div class="sec-head">Gastos Compartidos / Para el Otro</div>',
                     unsafe_allow_html=True)
-        exp_this = db.get_expenses(month=M, year=Y)
+        exp_this = _expenses(M, Y)
         shared_exp = (
             exp_this[exp_this["split_type"].isin(["shared", "for_other"])]
             if not exp_this.empty else pd.DataFrame()
@@ -641,11 +671,11 @@ with tab_deudas:
                 if reconciled:
                     if c3.button("↩ Deshacer", key=f"unrec_{row['id']}", help="Deshacer conciliación", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
-                        st.rerun()
+                        _clear_cache(); st.rerun()
                 else:
                     if c3.button("✅ Conciliar", key=f"rec_{row['id']}", help="Marcar como saldado (excluye del balance)", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
-                        st.rerun()
+                        _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
     # ── Manual debts ──────────────────────────────────────────────────────────
@@ -674,7 +704,7 @@ with tab_deudas:
                         db.add_manual_debt(md_debtor, md_creditor_val, float(md_amount),
                                            md_desc.strip(), md_date.isoformat())
                         st.success("✅ Deuda registrada!")
-                        st.rerun()
+                        _clear_cache(); st.rerun()
 
         if manual_df.empty:
             st.caption("Sin deudas manuales pendientes.")
@@ -692,10 +722,10 @@ with tab_deudas:
                 btn_col1, btn_col2 = c3.columns(2)
                 if btn_col1.button("✅", key=f"settle_md_{row['id']}", help="Marcar como saldada"):
                     db.settle_manual_debt(int(row["id"]))
-                    st.rerun()
+                    _clear_cache(); st.rerun()
                 if btn_col2.button("🗑", key=f"del_md_{row['id']}", help="Eliminar"):
                     db.delete_manual_debt(int(row["id"]))
-                    st.rerun()
+                    _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
     # ── Registrar pago / historial ────────────────────────────────────────────
@@ -723,11 +753,11 @@ with tab_deudas:
             if st.form_submit_button("✅ Registrar", use_container_width=True, type="primary"):
                 db.add_settlement(s_from, s_to_val, float(s_amount), s_desc, s_date.isoformat())
                 st.success("✅ Pago registrado!")
-                st.rerun()
+                _clear_cache(); st.rerun()
 
         st.markdown("")
         st.markdown('<div class="sec-head">Historial de Pagos</div>', unsafe_allow_html=True)
-        settlements = db.get_settlements(month=M, year=Y)
+        settlements = _settlements(M, Y)
         if settlements.empty:
             st.caption("Sin pagos este mes.")
         else:
@@ -742,5 +772,5 @@ with tab_deudas:
                             unsafe_allow_html=True)
                 if c3.button("🗑", key=f"del_s_{row['id']}"):
                     db.delete_settlement(int(row["id"]))
-                    st.rerun()
+                    _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
