@@ -27,6 +27,12 @@ def _manual_debts():    return db.get_manual_debts(only_pending=True)
 @st.cache_data(ttl=60, show_spinner=False)
 def _categories():      return db.get_categories()
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _savings_bal(person):        return db.get_savings_balance(person)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _savings_entries(person=None): return db.get_savings(person)
+
 def _spending(m, y):
     return db.calculate_spending_by_person_category(m, y, expenses=_expenses(m, y))
 
@@ -49,6 +55,7 @@ def _clear_cache():
     _expenses.clear(); _all_expenses.clear(); _budgets.clear()
     _settlements.clear(); _all_settlements.clear()
     _manual_debts.clear(); _categories.clear()
+    _savings_bal.clear(); _savings_entries.clear()
 
 st.set_page_config(
     page_title="El Plan de los Bichos · SG & AZ",
@@ -137,6 +144,85 @@ with st.sidebar:
         st.caption(f"Excel no disponible: {e}")
 
     st.caption("v1.2 · SG & AZ")
+
+
+# ─── Fragment: formulario nuevo gasto ────────────────────────────────────────
+@st.fragment
+def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
+    _SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+    _SPLIT_CAPTIONS = {
+        "personal":  "Solo cuenta para quien pagó.",
+        "shared":    "Se divide 50/50 en el presupuesto de cada uno.",
+        "for_other": "Lo pagó uno, pero es gasto del otro.",
+        "custom":    "Elegí qué porcentaje paga el otro.",
+    }
+    if "nexp_fk" not in st.session_state:
+        st.session_state["nexp_fk"] = 0
+    fk = st.session_state["nexp_fk"]
+
+    description  = st.text_input("Descripción", placeholder="Ej: Almuerzo, Supermercado…",
+                                 key=f"nexp_desc_{fk}")
+    nc1, nc2 = st.columns(2)
+    cat_name = nc1.selectbox("Categoría", list(cat_name_to_id.keys()), key=f"nexp_cat_{fk}")
+    payer    = nc2.selectbox("Pagó", db.PERSONS,
+                             format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
+                             key=f"nexp_payer_{fk}")
+    nc3, nc4 = st.columns(2)
+    amount       = nc3.number_input("Monto ($)", min_value=0.0, value=None, step=1.0,
+                                    format="%.2f", key=f"nexp_amount_{fk}")
+    expense_date = nc4.date_input("Fecha real", value=date.today(), key=f"nexp_date_{fk}")
+
+    split_type = st.selectbox(
+        "Tipo de gasto", list(db.SPLIT_TYPES.keys()),
+        format_func=lambda x: db.SPLIT_TYPES[x],
+        key=f"nexp_split_{fk}",
+    )
+    st.caption(_SPLIT_CAPTIONS[split_type])
+    split_pct = None
+    if split_type == "custom":
+        split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
+                              key=f"nexp_pct_{fk}",
+                              help="Ej: 30 → el otro paga el 30%, vos el 70%")
+
+    notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…",
+                         key=f"nexp_notes_{fk}")
+
+    st.caption(f"📅 Se asignará al presupuesto de **{db.MONTHS_ES[M]} {Y}**")
+    if cat_name in _SAVINGS_CATS:
+        st.info("💰 Esta categoría también agregará el monto a Ahorros automáticamente.")
+
+    if st.button("💾 Guardar", use_container_width=True, type="primary", key="nexp_save"):
+        if not description.strip():
+            st.error("La descripción es requerida.")
+        elif amount is None or amount <= 0:
+            st.error("El monto debe ser mayor a $0.")
+        else:
+            bm = M if (expense_date.month != M or expense_date.year != Y) else None
+            by = Y if bm is not None else None
+            new_exp_id = db.add_expense(
+                description.strip(), cat_name_to_id[cat_name], payer, float(amount),
+                split_type, expense_date.isoformat(), notes.strip() or None,
+                budget_month=bm, budget_year=by,
+                split_pct=float(split_pct) if split_pct is not None else None,
+            )
+            if cat_name in _SAVINGS_CATS:
+                amt    = float(amount)
+                desc_s = f"{cat_name}: {description.strip()}"
+                other  = "AZ" if payer == "SG" else "SG"
+                opct   = (float(split_pct) / 100) if split_pct is not None else 0.5
+                if split_type == "personal":
+                    db.add_savings_entry(payer, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                elif split_type == "shared":
+                    db.add_savings_entry(payer, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                    db.add_savings_entry(other, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                elif split_type == "for_other":
+                    db.add_savings_entry(other, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                elif split_type == "custom":
+                    db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                    db.add_savings_entry(other, amt * opct,        "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+            st.session_state["nexp_fk"] += 1
+            _clear_cache()
+            st.rerun()  # full app rerun para refrescar lista
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
@@ -416,9 +502,8 @@ with tab_dash:
     st.markdown('<div class="sec-head">💰 Resumen de Ahorros y Proyección (12 meses)</div>',
                 unsafe_allow_html=True)
 
-    bal_sg = db.get_savings_balance("SG")
-    bal_az = db.get_savings_balance("AZ")
-    all_sv = db.get_savings()
+    bal_sg = _savings_bal("SG")
+    bal_az = _savings_bal("AZ")
 
     sa1, sa2, sa3 = st.columns(3)
     sa1.metric("💰 Ahorros Santiago", f"${bal_sg:,.0f}")
@@ -469,97 +554,14 @@ with tab_dash:
 #  TAB 2 · GASTOS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_gastos:
+    _cats_df = _categories()
+    cat_name_to_id = dict(zip(_cats_df["name"], _cats_df["id"]))
+
     col_form, col_list = st.columns([1, 2], gap="large")
 
     with col_form:
         st.markdown('<div class="sec-head">➕ Nuevo Gasto</div>', unsafe_allow_html=True)
-        cats_df       = _categories()
-        cat_name_to_id = dict(zip(cats_df["name"], cats_df["id"]))
-
-        SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
-        _SPLIT_CAPTIONS = {
-            "personal":  "Solo cuenta para quien pagó.",
-            "shared":    "Se divide 50/50 en el presupuesto de cada uno.",
-            "for_other": "Lo pagó uno, pero es gasto del otro.",
-            "custom":    "Elegí qué porcentaje paga el otro.",
-        }
-
-        # Incrementar esta clave al guardar limpia todos los widgets
-        if "nexp_fk" not in st.session_state:
-            st.session_state["nexp_fk"] = 0
-        fk = st.session_state["nexp_fk"]
-
-        description  = st.text_input("Descripción", placeholder="Ej: Almuerzo, Supermercado…",
-                                     key=f"nexp_desc_{fk}")
-        nc1, nc2 = st.columns(2)
-        cat_name = nc1.selectbox("Categoría", list(cat_name_to_id.keys()), key=f"nexp_cat_{fk}")
-        payer    = nc2.selectbox("Pagó", db.PERSONS,
-                                 format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
-                                 key=f"nexp_payer_{fk}")
-        nc3, nc4 = st.columns(2)
-        amount       = nc3.number_input("Monto ($)", min_value=0.0, value=None, step=1.0,
-                                        format="%.2f", key=f"nexp_amount_{fk}")
-        expense_date = nc4.date_input("Fecha real", value=date.today(), key=f"nexp_date_{fk}")
-
-        split_type = st.selectbox(
-            "Tipo de gasto", list(db.SPLIT_TYPES.keys()),
-            format_func=lambda x: db.SPLIT_TYPES[x],
-            key=f"nexp_split_{fk}",
-        )
-        st.caption(_SPLIT_CAPTIONS[split_type])
-        split_pct = None
-        if split_type == "custom":
-            split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
-                                  key=f"nexp_pct_{fk}",
-                                  help="Ej: 30 → el otro paga el 30%, vos el 70%")
-
-        notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…",
-                             key=f"nexp_notes_{fk}")
-
-        st.caption(f"📅 Se asignará al presupuesto de **{db.MONTHS_ES[M]} {Y}**")
-
-        if cat_name in SAVINGS_CATS:
-            st.info("💰 Esta categoría también agregará el monto a Ahorros automáticamente.")
-
-        if st.button("💾 Guardar", use_container_width=True, type="primary", key="nexp_save"):
-            if not description.strip():
-                st.error("La descripción es requerida.")
-            elif amount is None or amount <= 0:
-                st.error("El monto debe ser mayor a $0.")
-            else:
-                bm = M if (expense_date.month != M or expense_date.year != Y) else None
-                by = Y if bm is not None else None
-
-                new_exp_id = db.add_expense(
-                    description.strip(),
-                    cat_name_to_id[cat_name],
-                    payer,
-                    float(amount),
-                    split_type,
-                    expense_date.isoformat(),
-                    notes.strip() or None,
-                    budget_month=bm,
-                    budget_year=by,
-                    split_pct=float(split_pct) if split_pct is not None else None,
-                )
-                if cat_name in SAVINGS_CATS:
-                    amt    = float(amount)
-                    desc_s = f"{cat_name}: {description.strip()}"
-                    other  = "AZ" if payer == "SG" else "SG"
-                    opct   = (float(split_pct) / 100) if split_pct is not None else 0.5
-                    if split_type == "personal":
-                        db.add_savings_entry(payer, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                    elif split_type == "shared":
-                        db.add_savings_entry(payer, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                        db.add_savings_entry(other, amt * 0.5, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                    elif split_type == "for_other":
-                        db.add_savings_entry(other, amt, "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                    elif split_type == "custom":
-                        db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                        db.add_savings_entry(other, amt * opct,        "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
-                st.session_state["nexp_fk"] += 1
-                st.success("✅ Gasto guardado!")
-                _clear_cache(); st.rerun()
+        _new_expense_panel(M, Y, cat_name_to_id)
 
     with col_list:
         st.markdown(f'<div class="sec-head">Gastos de {sel_month_name} {sel_year}</div>',
@@ -1066,8 +1068,8 @@ with tab_ahorros:
 
     for person, col in [("SG", col_sg), ("AZ", col_az)]:
         name    = db.PERSON_NAMES[person]
-        balance = db.get_savings_balance(person)
-        entries = db.get_savings(person)
+        balance = _savings_bal(person)
+        entries = _savings_entries(person)
 
         with col:
             st.markdown(f"### {name}")
@@ -1101,7 +1103,7 @@ with tab_ahorros:
                             db.add_savings_entry(person, float(sv_amount), sv_type,
                                                  sv_desc.strip(), sv_date.isoformat())
                             st.success("✅ Movimiento guardado!")
-                            st.rerun()
+                            _clear_cache(); st.rerun()
 
             with st.expander("📈 Rentabilidad"):
                 with st.form(f"return_form_{person}", clear_on_submit=True):
@@ -1125,7 +1127,7 @@ with tab_ahorros:
                             db.add_savings_entry(person, float(rv_amount), rv_type,
                                                  rv_desc.strip(), rv_date.isoformat())
                             st.success("✅ Rentabilidad guardada!")
-                            st.rerun()
+                            _clear_cache(); st.rerun()
 
             # ── Historial ─────────────────────────────────────────────────────
             st.markdown('<div class="sec-head">Historial</div>', unsafe_allow_html=True)
@@ -1151,6 +1153,6 @@ with tab_ahorros:
                     )
                     if c3.button("🗑", key=f"del_sv_{row['id']}", help="Eliminar"):
                         db.delete_savings_entry(int(row["id"]))
-                        st.rerun()
+                        _clear_cache(); st.rerun()
                     st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>",
                                 unsafe_allow_html=True)
