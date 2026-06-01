@@ -1,7 +1,6 @@
 import io
 import os
 from contextlib import contextmanager
-from urllib.parse import urlparse
 import psycopg2
 import psycopg2.extras
 import pandas as pd
@@ -61,16 +60,7 @@ def _get_db_url() -> str:
 
 @contextmanager
 def get_conn():
-    url = _get_db_url()
-    parsed = urlparse(url)
-    conn = psycopg2.connect(
-        host=parsed.hostname,
-        port=parsed.port or 5432,
-        dbname=parsed.path.lstrip("/"),
-        user=parsed.username,
-        password=parsed.password,
-        sslmode="require",
-    )
+    conn = psycopg2.connect(_get_db_url(), sslmode="require")
     try:
         yield conn
         conn.commit()
