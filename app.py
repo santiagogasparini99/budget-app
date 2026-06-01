@@ -122,24 +122,18 @@ with st.sidebar:
     st.caption(f"📅 {sel_month_name} {sel_year}")
 
     # ── Export ────────────────────────────────────────────────────────────────
-    export_key = f"excel_{M}_{Y}"
-    if st.button("📊 Generar Excel", use_container_width=True, key="gen_excel"):
-        try:
-            st.session_state["excel_bytes"] = db.build_excel_export(M, Y)
-            st.session_state["excel_key"]   = export_key
-            st.session_state["excel_name"]  = f"presupuesto_{sel_month_name}_{Y}.xlsx"
-        except Exception as e:
-            st.error(f"Error al generar: {e}")
-
-    if st.session_state.get("excel_key") == export_key and "excel_bytes" in st.session_state:
+    try:
+        excel_bytes = db.build_excel_export(M, Y)
         st.download_button(
             label="📥 Descargar Excel",
-            data=st.session_state["excel_bytes"],
-            file_name=st.session_state["excel_name"],
+            data=excel_bytes,
+            file_name=f"presupuesto_{sel_month_name}_{Y}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             key="dl_excel",
         )
+    except Exception as e:
+        st.caption(f"Excel no disponible: {e}")
 
     st.caption("v1.2 · SG & AZ")
 
@@ -563,7 +557,9 @@ with tab_presup:
 
     total_sg = edited["Santiago (SG) $"].sum()
     total_az = edited["Alex (AZ) $"].sum()
-    st.markdown(f"**Total Santiago:** ${total_sg:,.0f} &nbsp;&nbsp; **Total Alex:** ${total_az:,.0f}", unsafe_allow_html=True)
+    tc1, tc2 = st.columns(2)
+    tc1.metric("Total Santiago", f"${total_sg:,.0f}")
+    tc2.metric("Total Alex",     f"${total_az:,.0f}")
 
     if st.button("💾 Guardar Presupuesto", type="primary"):
         for idx, row in edited.iterrows():
@@ -815,8 +811,21 @@ with tab_deudas:
 with tab_ahorros:
     st.markdown("## 💰 Ahorros")
 
-    ENTRY_LABELS = {"deposit": "Depósito", "previous": "Ahorro previo", "withdrawal": "Retiro"}
-    ENTRY_COLORS = {"deposit": "#38a169", "previous": "#3182ce", "withdrawal": "#e53e3e"}
+    ENTRY_LABELS = {
+        "deposit":    "Depósito",
+        "previous":   "Ahorro previo",
+        "withdrawal": "Retiro",
+        "return":     "Rentabilidad +",
+        "loss":       "Rentabilidad −",
+    }
+    ENTRY_COLORS = {
+        "deposit":    "#38a169",
+        "previous":   "#3182ce",
+        "withdrawal": "#e53e3e",
+        "return":     "#805ad5",
+        "loss":       "#dd6b20",
+    }
+    ENTRY_SIGNS = {"withdrawal": "-", "loss": "-"}  # rest are "+"
 
     col_sg, col_az = st.columns(2, gap="large")
 
@@ -831,11 +840,14 @@ with tab_ahorros:
 
             st.markdown("")
 
-            # ── Formulario ────────────────────────────────────────────────────
-            with st.expander("➕ Agregar movimiento"):
+            # ── Formulario ahorros ─────────────────────────────────────────────
+            SAVINGS_TYPES = ["deposit", "previous", "withdrawal"]
+            RETURN_TYPES  = ["return", "loss"]
+
+            with st.expander("➕ Movimiento de ahorro"):
                 with st.form(f"savings_form_{person}", clear_on_submit=True):
                     sv_type = st.selectbox(
-                        "Tipo", list(ENTRY_LABELS.keys()),
+                        "Tipo", SAVINGS_TYPES,
                         format_func=lambda x: ENTRY_LABELS[x],
                         key=f"sv_type_{person}",
                     )
@@ -845,7 +857,6 @@ with tab_ahorros:
                     sv_amount = st.number_input("Monto ($) *", min_value=0.01, value=None,
                                                 step=1.0, format="%.2f", key=f"sv_amt_{person}")
                     sv_date   = st.date_input("Fecha", value=date.today(), key=f"sv_date_{person}")
-
                     if st.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
                         if not sv_desc.strip():
                             st.error("La descripción es requerida.")
@@ -857,6 +868,30 @@ with tab_ahorros:
                             st.success("✅ Movimiento guardado!")
                             st.rerun()
 
+            with st.expander("📈 Rentabilidad"):
+                with st.form(f"return_form_{person}", clear_on_submit=True):
+                    rv_type = st.radio(
+                        "Tipo", ["return", "loss"],
+                        format_func=lambda x: ENTRY_LABELS[x],
+                        horizontal=True, key=f"rv_type_{person}",
+                    )
+                    rv_desc   = st.text_input("Descripción *",
+                                              placeholder="Ej: Rendimiento fondo, Ajuste mercado…",
+                                              key=f"rv_desc_{person}")
+                    rv_amount = st.number_input("Monto ($) *", min_value=0.01, value=None,
+                                                step=1.0, format="%.2f", key=f"rv_amt_{person}")
+                    rv_date   = st.date_input("Fecha", value=date.today(), key=f"rv_date_{person}")
+                    if st.form_submit_button("💾 Guardar rentabilidad", use_container_width=True, type="primary"):
+                        if not rv_desc.strip():
+                            st.error("La descripción es requerida.")
+                        elif rv_amount is None or rv_amount <= 0:
+                            st.error("El monto debe ser mayor a $0.")
+                        else:
+                            db.add_savings_entry(person, float(rv_amount), rv_type,
+                                                 rv_desc.strip(), rv_date.isoformat())
+                            st.success("✅ Rentabilidad guardada!")
+                            st.rerun()
+
             # ── Historial ─────────────────────────────────────────────────────
             st.markdown('<div class="sec-head">Historial</div>', unsafe_allow_html=True)
             if entries.empty:
@@ -866,7 +901,7 @@ with tab_ahorros:
                     etype = row.get("entry_type", "deposit")
                     color = ENTRY_COLORS.get(etype, "#888")
                     label = ENTRY_LABELS.get(etype, etype)
-                    sign  = "-" if etype == "withdrawal" else "+"
+                    sign  = ENTRY_SIGNS.get(etype, "+")
                     c1, c2, c3 = st.columns([3.5, 1.5, 0.5])
                     c1.markdown(
                         f"**{row['description']}**<br>"

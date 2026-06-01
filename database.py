@@ -562,7 +562,7 @@ def get_savings(person: str = None) -> pd.DataFrame:
 def get_savings_balance(person: str) -> float:
     with get_conn() as conn:
         cur = _run(conn,
-                   "SELECT COALESCE(SUM(CASE WHEN entry_type='withdrawal' THEN -amount ELSE amount END),0) FROM savings WHERE person=%s",
+                   "SELECT COALESCE(SUM(CASE WHEN entry_type IN ('withdrawal','loss') THEN -amount ELSE amount END),0) FROM savings WHERE person=%s",
                    (person,))
         return float(cur.fetchone()[0])
 
@@ -732,6 +732,35 @@ def build_excel_export(month: int, year: int) -> bytes:
                         round(float(r["amount"]), 2), r["description"] or ""])
 
     autofit(ws3)
+
+    # ── Sheet 4: Ahorros ──────────────────────────────────────────────────────
+    ws4 = wb.create_sheet("Ahorros")
+    ENTRY_LABELS_XL = {
+        "deposit": "Depósito", "previous": "Ahorro previo",
+        "withdrawal": "Retiro", "return": "Rentabilidad +", "loss": "Rentabilidad −",
+    }
+    for person in PERSONS:
+        ws4.append([f"Ahorros — {PERSON_NAMES[person]}"])
+        ws4[f"A{ws4.max_row}"].font = Font(bold=True, size=12)
+        ws4.append(["Fecha", "Descripción", "Tipo", "Monto ($)"])
+        style_header(ws4)
+        sav = get_savings(person)
+        if not sav.empty:
+            for _, r in sav.iterrows():
+                sign = -1 if r["entry_type"] in ("withdrawal", "loss") else 1
+                ws4.append([r["date"], r["description"],
+                            ENTRY_LABELS_XL.get(r["entry_type"], r["entry_type"]),
+                            round(float(r["amount"]) * sign, 2)])
+        balance_sv = get_savings_balance(person)
+        tr = ws4.max_row + 1
+        ws4.cell(tr, 1, "SALDO TOTAL").font = TOTAL_FONT
+        ws4.cell(tr, 1).fill = TOTAL_FILL
+        c = ws4.cell(tr, 4, round(balance_sv, 2))
+        c.font = TOTAL_FONT
+        c.fill = TOTAL_FILL
+        ws4.append([])
+
+    autofit(ws4)
 
     buf = io.BytesIO()
     wb.save(buf)
