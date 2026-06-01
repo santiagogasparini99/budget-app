@@ -1,0 +1,11 @@
+# Secrets — NUNCA subir al repo
+.streamlit/secrets.toml
+
+# Base de datos local (ya no se usa, pero por las dudas)
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.env
