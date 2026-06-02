@@ -957,7 +957,7 @@ def _deudas_panel(M: int, Y: int):
                     unsafe_allow_html=True,
                 )
                 if reconciled:
-                    if c3.button("↩ Per.", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
+                    if c3.button("↩ Period.", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
                         _clear_cache(); st.rerun(scope="fragment")
                 else:
