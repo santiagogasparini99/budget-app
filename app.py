@@ -923,7 +923,7 @@ def _deudas_panel(M: int, Y: int):
     col_shared, col_manual, col_pay = st.columns([2, 2, 1.4], gap="medium")
 
     with col_shared:
-        st.markdown('<div class="sec-head">Gastos del período con deuda (Pueden Acumularse)</div>',
+        st.markdown('<div class="sec-head">Deuda período</div>',
                     unsafe_allow_html=True)
         exp_this   = _expenses(M, Y)
         shared_exp = (
@@ -967,7 +967,7 @@ def _deudas_panel(M: int, Y: int):
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
     with col_manual:
-        st.markdown('<div class="sec-head">Deudas acumuladas</div>',
+        st.markdown('<div class="sec-head">Deuda acumulada</div>',
                     unsafe_allow_html=True)
 
         with st.expander("➕ Nueva deuda manual"):
@@ -1005,10 +1005,12 @@ def _deudas_panel(M: int, Y: int):
                     unsafe_allow_html=True,
                 )
                 c2.markdown(f"**${row['amount']:,.0f}**")
-                if c3.button("✅", key=f"settle_md_{row['id']}", help="Marcar como saldada"):
+                if c3.button("✅", key=f"settle_md_{row['id']}", help="Marcar como saldada",
+                            use_container_width=True):
                     db.settle_manual_debt(int(row["id"]))
                     _clear_cache(); st.rerun(scope="fragment")
-                if c4.button("🗑", key=f"del_md_{row['id']}", help="Eliminar"):
+                if c4.button("🗑", key=f"del_md_{row['id']}", help="Eliminar",
+                             use_container_width=True):
                     db.delete_manual_debt(int(row["id"]))
                     _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
@@ -1055,7 +1057,7 @@ def _deudas_panel(M: int, Y: int):
                 )
                 c2.markdown(f"${row['amount']:,.0f}<br><small>{row['description']}</small>",
                             unsafe_allow_html=True)
-                if c3.button("🗑", key=f"del_s_{row['id']}"):
+                if c3.button("🗑", key=f"del_s_{row['id']}", use_container_width=True):
                     db.delete_settlement(int(row["id"]))
                     _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
