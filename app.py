@@ -601,8 +601,7 @@ with tab_dash:
             i1.metric("💵 Sueldo",        f"${salary:,.0f}")
             i2.metric("💵 Extras",         f"${extras:,.0f}")
             i3.metric("💵 Total ingresos", f"${total_inc:,.0f}")
-            i4.metric("💰 Disponible",     f"${disponible:,.0f}",
-                      delta=f"${disponible:,.0f}", delta_color="normal")
+            i4.metric("💰 Disponible",     f"${disponible:,.0f}")
             st.markdown("")
 
         c1, c2, c3 = st.columns(3)
