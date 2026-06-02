@@ -1254,8 +1254,8 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
             total = sal + extra
             st.markdown(
                 f"**{db.PERSON_NAMES[p]}** — "
-                f"<span style='color:#68d391'>💵 ${total:,.0f}</span> "
-                f"<small style='color:#888'>(sueldo ${sal:,.0f} + extras ${extra:,.0f})</small>",
+                f"<span style='color:#68d391'>💵 &#36;{total:,.0f}</span> "
+                f"<small style='color:#888'>(sueldo &#36;{sal:,.0f} + extras &#36;{extra:,.0f})</small>",
                 unsafe_allow_html=True,
             )
 
