@@ -614,16 +614,23 @@ with tab_dash:
 
         if total_inc > 0:
             i1, i2, i3, i4 = st.columns(4)
-            i1.metric("💵 Sueldo",        f"${salary:,.0f}")
-            i2.metric("💵 Extras",         f"${extras:,.0f}")
-            i3.metric("💵 Total ingresos", f"${total_inc:,.0f}")
-            i4.metric("💰 Disponible",     f"${disponible:,.0f}")
+            i1.metric("💵 Sueldo",        f"${salary:,.0f}",
+                      help="Sueldo mensual registrado en la hoja Ingresos")
+            i2.metric("💵 Extras",         f"${extras:,.0f}",
+                      help="Suma de ingresos adicionales del mes")
+            i3.metric("💵 Total ingresos", f"${total_inc:,.0f}",
+                      help="Sueldo + Extras")
+            i4.metric("💰 Disponible = Ing. − Util.", f"${disponible:,.0f}",
+                      help=f"Total ingresos (${total_inc:,.0f}) menos todo lo gastado en el mes (${spent_all:,.0f})")
             st.markdown("")
 
         c1, c2, c3 = st.columns(3)
-        c1.metric(f"💼 Presupuesto",  f"${budget:,.0f}")
-        c2.metric(f"💸 Utilizado",    f"${spent:,.0f}")
-        c3.metric(f"✅ Restante",     f"${rem:,.0f}")
+        c1.metric(f"💼 Presupuesto",       f"${budget:,.0f}",
+                  help=f"Presupuesto asignado al grupo «{kpi_group}» este mes")
+        c2.metric(f"💸 Utilizado",          f"${spent:,.0f}",
+                  help=f"Lo gastado dentro del grupo «{kpi_group}» este mes")
+        c3.metric(f"✅ Restante = Presup. − Util.", f"${rem:,.0f}",
+                  help=f"Presupuesto (${budget:,.0f}) menos lo utilizado (${spent:,.0f}) en «{kpi_group}»")
 
     # Debt chip
     st.markdown("")
