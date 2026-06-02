@@ -1223,7 +1223,7 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                     f"{p} · {db.PERSON_NAMES[p]}",
                     min_value=0.0,
                     value=income_data.get(p, 0.0),
-                    step=1000.0, format="%.0f",
+                    step=50.0, format="%.0f",
                     key=f"sal_{p}",
                 )
             if st.form_submit_button("💾 Guardar sueldos", use_container_width=True, type="primary"):
