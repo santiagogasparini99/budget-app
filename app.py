@@ -416,21 +416,25 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             by_val  = row.get("budget_year")
             if bm_val is not None and not (isinstance(bm_val, float) and pd.isna(bm_val)):
                 bm_label = db.MONTHS_ES.get(int(bm_val), "?")
-                bm_info  = f" · <span style='color:#3182ce;font-size:10px'>📅 Presup. {bm_label} {int(by_val)}</span>"
+                bm_info  = f" &nbsp;📅 <span style='color:#3182ce'>{bm_label} {int(by_val)}</span>"
 
             _nv = row.get("notes")
-            notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
-                          if _nv and isinstance(_nv, str) and _nv.strip() else "")
+            notes_part = f" · {_nv}" if _nv and isinstance(_nv, str) and _nv.strip() else ""
 
-            # Fila 1: título + tag + quien + monto + botones (todos single-line)
-            c_desc, c_tag, c_who, c_amt, c_btns = st.columns([3.5, 2, 1, 1.2, 0.85])
-            c_desc.markdown(f"**{row['description']}**")
+            c_info, c_tag, c_who, c_amt, c_btns = st.columns([4, 2, 0.8, 1.2, 0.85])
+            c_info.markdown(
+                f"<div style='line-height:1.3'>"
+                f"<strong>{row['description']}</strong><br>"
+                f"<span style='color:#666;font-size:0.78em'>{row['category_name']} · {row['date']}{bm_info}{notes_part}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
             c_tag.markdown(
                 f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
                 unsafe_allow_html=True,
             )
             c_who.markdown(f"**{row['payer']}**")
-            c_amt.markdown(f"**${row['amount']:,.0f}**")
+            c_amt.markdown(f"**&#36;{row['amount']:,.0f}**")
             with c_btns:
                 b1, b2 = st.columns(2)
                 if b1.button("✏️", key=f"edit_e_{row_id}", help="Editar",
@@ -441,13 +445,9 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                              use_container_width=True):
                     db.delete_expense(row_id)
                     _clear_cache(); st.rerun()
-            # Fila 2: meta info (categoría, fecha, notas)
-            meta = f"<small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
-            if _nv and isinstance(_nv, str) and _nv.strip():
-                meta += f"<small style='color:#aaa'> · {_nv}</small>"
-            st.markdown(f"<div style='margin-top:-22px'>{meta}</div>", unsafe_allow_html=True)
 
-        st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
+        st.markdown("<div style='border-top:1px solid #2d3748;margin:6px 0'></div>",
+                    unsafe_allow_html=True)
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
