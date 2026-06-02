@@ -167,7 +167,7 @@ with st.sidebar:
 # ─── Fragment: formulario nuevo gasto ────────────────────────────────────────
 @st.fragment
 def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
-    _SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+    _SAVINGS_CATS = {"Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"}
     _SPLIT_CAPTIONS = {
         "personal":  "Solo cuenta para quien pagó.",
         "shared":    "Se divide 50/50 en el presupuesto de cada uno.",
@@ -285,7 +285,7 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
     st.markdown("")
 
     TYPE_COLORS = {"personal": "#667eea", "shared": "#f6ad55", "for_other": "#fc8181"}
-    SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+    SAVINGS_CATS = {"Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"}
 
     for _, row in filtered.iterrows():
         row_id = int(row["id"])
@@ -556,7 +556,7 @@ with tab_dash:
         "Todas":      None,
         "Diversión":  ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
         "Hogar":      ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
-        "Ahorro":     ["Spain Move Fund", "Emergency Savings", "Viajes"],
+        "Ahorro":     ["Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"],
     }
     income_data  = _monthly_income(M, Y)
     income_extra = _income_entries(M, Y)
@@ -631,7 +631,7 @@ with tab_dash:
         CAT_GROUPS = {
             "Todas": None,
             "Diversión": ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
-            "Ahorro":    ["Spain Move Fund", "Emergency Savings", "Viajes"],
+            "Ahorro":    ["Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"],
             "Hogar":     ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
         }
         prog_group = ph2.selectbox("Grupo", list(CAT_GROUPS.keys()),
@@ -756,7 +756,7 @@ with tab_dash:
     sa3.metric("💰 Total Ahorros",    f"${bal_sg + bal_az:,.0f}")
 
     # Proyección: tasa mensual = presupuesto de categorías de ahorro del mes seleccionado
-    PROJ_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+    PROJ_CATS = {"Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"}
     if not budgets_df.empty:
         proj_mask = budgets_df["category_name"].isin(PROJ_CATS)
         rate_sg = float(budgets_df[proj_mask]["budget_SG"].sum())

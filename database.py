@@ -29,9 +29,9 @@ DEFAULT_CATEGORIES = [
     ("Suscripciones", "#6C757D"),
     ("Gym", "#F72585"),
     ("Miscellaneous", "#ADB5BD"),
-    ("Viajes", "#00D4FF"),
-    ("Emergency Savings", "#2DC653"),
-    ("Spain Move Fund", "#3A86FF"),
+    ("Ahorro para viajes", "#00D4FF"),
+    ("Ahorro de emergencia", "#2DC653"),
+    ("Ahorro para España", "#3A86FF"),
 ]
 
 PERSON_NAMES = {"SG": "Santiago", "AZ": "Alex"}
@@ -229,6 +229,13 @@ def init_db():
             _run(conn, f"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS {col} {definition}")
         _run(conn, "ALTER TABLE settlements ADD COLUMN IF NOT EXISTS debt_type TEXT DEFAULT 'period'")
         _run(conn, "ALTER TABLE savings ADD COLUMN IF NOT EXISTS expense_id INTEGER")
+
+        for old, new in [
+            ("Emergency Savings", "Ahorro de emergencia"),
+            ("Spain Move Fund",   "Ahorro para España"),
+            ("Viajes",            "Ahorro para viajes"),
+        ]:
+            _run(conn, "UPDATE categories SET name=%s WHERE name=%s", (new, old))
 
         for name, color in DEFAULT_CATEGORIES:
             _run(conn,
