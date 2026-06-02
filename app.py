@@ -748,10 +748,9 @@ with tab_dash:
     rate_total  = rate_sg + rate_az
     bal_total   = bal_sg + bal_az
     proj_months, proj_total = [], []
-    now = datetime.now()
     for i in range(13):
-        m = ((now.month - 1 + i) % 12) + 1
-        y = now.year + (now.month - 1 + i) // 12
+        m = ((M - 1 + i) % 12) + 1
+        y = Y + (M - 1 + i) // 12
         proj_months.append(f"{db.MONTHS_ES[m][:3]} {y}")
         proj_total.append(bal_total + rate_total * i)
 
