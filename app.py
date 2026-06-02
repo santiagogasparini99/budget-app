@@ -79,6 +79,20 @@ except Exception as _db_err:
     st.info("Verificá que el secret DATABASE_URL esté correctamente configurado en Streamlit Cloud.")
     st.stop()
 
+# ─── iOS home screen icon ─────────────────────────────────────────────────────
+st.markdown("""
+<script>
+(function() {
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#1a1f2e"/><text y=".9em" font-size="72" x="12">🪲</text></svg>';
+  var url = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  var link = document.createElement('link');
+  link.rel = 'apple-touch-icon';
+  link.href = url;
+  document.head.appendChild(link);
+})();
+</script>
+""", unsafe_allow_html=True)
+
 # ─── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
