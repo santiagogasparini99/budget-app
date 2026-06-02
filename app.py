@@ -186,7 +186,7 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
                              format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
                              key=f"nexp_payer_{fk}")
     nc3, nc4 = st.columns(2)
-    amount       = nc3.number_input("Monto ($)", min_value=0, value=0, step=1,
+    amount       = nc3.number_input("Monto ($)", min_value=1, value=None, step=1,
                                     format="%d", key=f"nexp_amount_{fk}")
     expense_date = nc4.date_input("Fecha real", value=date.today(), key=f"nexp_date_{fk}")
 
@@ -1255,8 +1255,8 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                 ni1, ni2  = st.columns(2)
                 ni_person = ni1.selectbox("Persona", db.PERSONS,
                                           format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}")
-                ni_amount = ni2.number_input("Monto ($)", min_value=0.01,
-                                             value=None, step=1.0, format="%.0f")
+                ni_amount = ni2.number_input("Monto ($)", min_value=50,
+                                             value=None, step=50, format="%d")
                 ni_date   = st.date_input("Fecha", value=date.today())
                 ni_notes  = st.text_input("Notas (opcional)", placeholder="")
                 if st.form_submit_button("➕ Agregar", use_container_width=True, type="primary"):
