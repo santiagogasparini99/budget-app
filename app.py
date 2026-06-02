@@ -114,9 +114,6 @@ st.markdown("""
   div[data-testid="stRadio"] label { cursor: pointer; }
 
   hr { border-color: #2d3748 !important; }
-
-  /* Alinear verticalmente al centro todas las filas de columnas */
-  div[data-testid="stHorizontalBlock"] { align-items: center; }
 </style>
 """, unsafe_allow_html=True)
 
