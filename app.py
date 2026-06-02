@@ -114,6 +114,10 @@ st.markdown("""
   div[data-testid="stRadio"] label { cursor: pointer; }
 
   hr { border-color: #2d3748 !important; }
+
+  /* Centrar emojis dentro de botones de icono */
+  div[data-testid="stButton"] button { justify-content: center !important; }
+  div[data-testid="stButton"] button p { text-align: center !important; width: 100%; margin: 0; }
 </style>
 """, unsafe_allow_html=True)
 
