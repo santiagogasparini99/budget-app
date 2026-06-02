@@ -532,15 +532,27 @@ with tab_dash:
     spending_df = _spending(M, Y)
     balance     = _period_balance(M, Y) + _accum_balance()
 
-    # ── Person filter ─────────────────────────────────────────────────────────
-    hdr, filter_col = st.columns([3, 2])
+    # ── Filtros ───────────────────────────────────────────────────────────────
+    KPI_GROUPS = {
+        "Todas":      None,
+        "Diversión":  ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
+        "Hogar":      ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
+        "Ahorro":     ["Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"],
+    }
+
+    hdr, person_col, group_col = st.columns([2, 3, 2])
     hdr.markdown(f"## {sel_month_name} {sel_year}")
-    with filter_col:
+    with person_col:
         st.markdown("&nbsp;")
         dash_filter = st.radio(
             "Persona", ["Ambos", "Santiago (SG)", "Alex (AZ)"],
             horizontal=True, label_visibility="collapsed", key="dash_filter",
         )
+    kpi_group = group_col.selectbox(
+        "Grupo", list(KPI_GROUPS.keys()),
+        label_visibility="collapsed", key="kpi_group",
+    )
+    kpi_filter = KPI_GROUPS[kpi_group]
 
     if dash_filter == "Santiago (SG)":
         persons_dash = ["SG"]
@@ -551,23 +563,9 @@ with tab_dash:
 
     st.divider()
 
-    # ── KPI cards — una fila por Santiago, Alex y Ambos ──────────────────────
-    KPI_GROUPS = {
-        "Todas":      None,
-        "Diversión":  ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
-        "Hogar":      ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
-        "Ahorro":     ["Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"],
-    }
+    # ── KPI cards ─────────────────────────────────────────────────────────────
     income_data  = _monthly_income(M, Y)
     income_extra = _income_entries(M, Y)
-
-    kpi_hdr, kpi_sel = st.columns([4, 2])
-    kpi_hdr.markdown("##### Resumen por grupo")
-    kpi_group = kpi_sel.selectbox(
-        "Grupo KPI", list(KPI_GROUPS.keys()),
-        label_visibility="collapsed", key="kpi_group",
-    )
-    kpi_filter = KPI_GROUPS[kpi_group]
 
     if dash_filter == "Santiago (SG)":
         kpi_rows = [("Santiago", ["SG"])]
@@ -577,8 +575,8 @@ with tab_dash:
         kpi_rows = [("Santiago", ["SG"]), ("Alex", ["AZ"]), ("Ambos", ["SG", "AZ"])]
 
     for row_label, row_persons in kpi_rows:
-        bdf_kpi = (budgets_df[budgets_df["category_name"].isin(kpi_filter)]
-                   if kpi_filter and not budgets_df.empty else budgets_df)
+        bdf_kpi  = (budgets_df[budgets_df["category_name"].isin(kpi_filter)]
+                    if kpi_filter and not budgets_df.empty else budgets_df)
         spdf_kpi = (spending_df[spending_df["category_name"].isin(kpi_filter)]
                     if kpi_filter and not spending_df.empty else spending_df)
 
@@ -588,13 +586,13 @@ with tab_dash:
                   if not spdf_kpi.empty else 0.0)
         rem    = budget - spent
 
-        salary     = sum(income_data.get(p, 0.0) for p in row_persons)
-        extras     = (income_extra[income_extra["person"].isin(row_persons)]["amount"].sum()
-                      if not income_extra.empty else 0.0)
-        total_inc  = salary + extras
-        total_spent_all = (spending_df[spending_df["person"].isin(row_persons)]["spent"].sum()
-                           if not spending_df.empty else 0.0)
-        disponible = total_inc - total_spent_all
+        salary    = sum(income_data.get(p, 0.0) for p in row_persons)
+        extras    = (income_extra[income_extra["person"].isin(row_persons)]["amount"].sum()
+                     if not income_extra.empty else 0.0)
+        total_inc = salary + extras
+        spent_all = (spending_df[spending_df["person"].isin(row_persons)]["spent"].sum()
+                     if not spending_df.empty else 0.0)
+        disponible = total_inc - spent_all
 
         st.markdown(f"**{row_label}**")
 
@@ -607,14 +605,10 @@ with tab_dash:
                       delta=f"${disponible:,.0f}", delta_color="normal")
             st.markdown("")
 
-        group_label = kpi_group if kpi_filter else "Total"
-        c1, c2, c3, c4, c5, c6 = st.columns(6)
-        c1.metric(f"💼 Presup. {group_label}",    f"${budget:,.0f}")
-        c2.metric(f"💸 Utilizado {group_label}",   f"${spent:,.0f}")
-        c3.metric(f"✅ Restante {group_label}",    f"${rem:,.0f}")
-        c4.metric("💼 Presup. Total",  f"${sum(budgets_df[f'budget_{p}'].sum() for p in row_persons) if not budgets_df.empty else 0.0:,.0f}")
-        c5.metric("💸 Utilizado Total", f"${total_spent_all:,.0f}")
-        c6.metric("✅ Restante Total",  f"${(sum(budgets_df[f'budget_{p}'].sum() for p in row_persons) if not budgets_df.empty else 0.0) - total_spent_all:,.0f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"💼 Presupuesto",  f"${budget:,.0f}")
+        c2.metric(f"💸 Utilizado",    f"${spent:,.0f}")
+        c3.metric(f"✅ Restante",     f"${rem:,.0f}")
 
     # Debt chip
     st.markdown("")
