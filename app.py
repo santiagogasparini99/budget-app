@@ -1217,15 +1217,6 @@ with tab_ahorros:
 # ══════════════════════════════════════════════════════════════════════════════
 @st.fragment
 def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
-    if st.session_state.pop("confetti_ingresos", False):
-        components.html("""
-        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
-        <script>
-        confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 },
-                   colors: ['#667eea','#68d391','#f6ad55','#fc8181','#f093fb'] });
-        </script>
-        """, height=0)
-
     st.markdown(f"## 💵 Ingresos · {sel_month_name} {sel_year}")
 
     income_data = _monthly_income(M, Y)
@@ -1289,7 +1280,7 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                                             float(ni_amount), ni_date.isoformat(),
                                             ni_notes.strip() or None)
                         _clear_cache()
-                        st.session_state["confetti_ingresos"] = True
+                        st.balloons()
                         st.rerun()
 
         if extras_df.empty:
