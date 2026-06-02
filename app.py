@@ -280,7 +280,11 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
 
     filtered = expenses.copy()
     if fp:
-        filtered = filtered[filtered["payer"].isin(fp)]
+        # Mostrar movimientos donde la persona pagó O participó (shared/for_other/custom)
+        filtered = filtered[
+            filtered["payer"].isin(fp) |
+            (~filtered["payer"].isin(fp) & (filtered["split_type"] != "personal"))
+        ]
     if fc != "Todas":
         filtered = filtered[filtered["category_name"] == fc]
     if ft != "Todos":
