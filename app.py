@@ -403,13 +403,9 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
                           if _nv and isinstance(_nv, str) and _nv.strip() else "")
 
+            # Fila 1: título + tag + quien + monto + botones (todos single-line)
             c_desc, c_tag, c_who, c_amt, c_btns = st.columns([3.5, 2, 1, 1.2, 0.85])
-            c_desc.markdown(
-                f"**{row['description']}**"
-                f"<br><small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
-                f"{notes_html}",
-                unsafe_allow_html=True,
-            )
+            c_desc.markdown(f"**{row['description']}**")
             c_tag.markdown(
                 f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
                 unsafe_allow_html=True,
@@ -426,6 +422,11 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                              use_container_width=True):
                     db.delete_expense(row_id)
                     _clear_cache(); st.rerun()
+            # Fila 2: meta info (categoría, fecha, notas)
+            meta = f"<small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
+            if _nv and isinstance(_nv, str) and _nv.strip():
+                meta += f"<small style='color:#aaa'> · {_nv}</small>"
+            st.markdown(meta, unsafe_allow_html=True)
 
         st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
