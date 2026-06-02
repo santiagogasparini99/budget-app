@@ -58,8 +58,8 @@ def _clear_cache():
     _savings_bal.clear(); _savings_entries.clear()
 
 st.set_page_config(
-    page_title="El Plan de los Bichos · SG & AZ",
-    page_icon="🐝",
+    page_title="El jardín 🪲 · SG & AZ",
+    page_icon="🪲",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -112,7 +112,7 @@ st.markdown("""
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 🐝🪲 El Plan de los Bichos")
+    st.markdown("## 🪲 El jardín")
     st.markdown("**Santiago & Alex**")
     st.divider()
 
