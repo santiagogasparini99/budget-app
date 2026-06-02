@@ -338,7 +338,7 @@ with tab_dash:
     st.divider()
 
     # ── KPI cards — una fila por Santiago, Alex y Ambos ──────────────────────
-    FUN_CATS = ["Salidas a comer", "Bares", "Café", "Cultura"]
+    FUN_CATS = ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"]
 
     if dash_filter == "Santiago (SG)":
         kpi_rows = [("Santiago", ["SG"])]
@@ -385,7 +385,7 @@ with tab_dash:
         # Category group filter
         CAT_GROUPS = {
             "Todas": None,
-            "Diversión": ["Salidas a comer", "Bares", "Café", "Cultura"],
+            "Diversión": ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
             "Ahorro":    ["Spain Move Fund", "Emergency Savings", "Viajes"],
             "Hogar":     ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
         }
