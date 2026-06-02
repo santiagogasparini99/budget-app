@@ -115,16 +115,8 @@ st.markdown("""
 
   hr { border-color: #2d3748 !important; }
 
-  /* Vertically center button columns in expense rows */
-  div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:has(.stButton) {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-  div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:has(.stButton) button {
-    padding: 2px 6px;
-    line-height: 1;
-  }
+  /* Alinear verticalmente al centro todas las filas de columnas */
+  div[data-testid="stHorizontalBlock"] { align-items: center; }
 </style>
 """, unsafe_allow_html=True)
 
