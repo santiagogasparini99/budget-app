@@ -290,10 +290,22 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
     if ft != "Todos":
         filtered = filtered[filtered["split_type"] == ft]
 
+    # Calcular total según la parte que le corresponde a la persona filtrada
+    if fp and not filtered.empty:
+        def _person_share(row):
+            amt   = float(row["amount"])
+            opct  = db._other_pct(row)
+            if row["split_type"] == "personal":
+                return amt if row["payer"] in fp else 0.0
+            return amt * (1 - opct) if row["payer"] in fp else amt * opct
+        total_sum = filtered.apply(_person_share, axis=1).sum()
+    else:
+        total_sum = filtered["amount"].sum() if not filtered.empty else 0.0
+
     sm1, sm2, sm3 = st.columns(3)
-    sm1.metric("Total movimientos ($)", f"${filtered['amount'].sum():,.0f}")
+    sm1.metric("Total movimientos ($)", f"${total_sum:,.0f}")
     sm2.metric("Transacciones", len(filtered))
-    sm3.metric("Promedio", f"${filtered['amount'].mean():,.0f}" if not filtered.empty else "$0.00")
+    sm3.metric("Promedio", f"${(total_sum / len(filtered)):,.0f}" if not filtered.empty else "$0")
 
     st.markdown("")
 
