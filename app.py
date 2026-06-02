@@ -107,6 +107,17 @@ st.markdown("""
   div[data-testid="stRadio"] label { cursor: pointer; }
 
   hr { border-color: #2d3748 !important; }
+
+  /* Vertically center button columns in expense rows */
+  div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:has(.stButton) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:has(.stButton) button {
+    padding: 2px 6px;
+    line-height: 1;
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -223,6 +234,202 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
             st.session_state["nexp_fk"] += 1
             _clear_cache()
             st.rerun()  # full app rerun para refrescar lista
+
+
+# ─── Fragment: lista de movimientos ──────────────────────────────────────────
+@st.fragment
+def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
+                        sel_month_name: str, sel_year: int,
+                        years: list, month_names: list, months_inv: dict):
+    st.markdown(f'<div class="sec-head">Movimientos de {sel_month_name} {sel_year}</div>',
+                unsafe_allow_html=True)
+
+    expenses = _expenses(M, Y)
+
+    if expenses.empty:
+        st.info("No hay movimientos registrados para este mes.")
+        return
+
+    cf1, cf2, cf3 = st.columns(3)
+    with cf1:
+        fp = st.multiselect("Persona", db.PERSONS,
+                            format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}")
+    with cf2:
+        all_cats = ["Todas"] + sorted(expenses["category_name"].unique().tolist())
+        fc = st.selectbox("Categoría", all_cats)
+    with cf3:
+        all_types = ["Todos"] + list(db.SPLIT_TYPES.keys())
+        ft = st.selectbox("Tipo", all_types,
+                          format_func=lambda x: "Todos" if x == "Todos" else db.SPLIT_TYPES[x])
+
+    filtered = expenses.copy()
+    if fp:
+        filtered = filtered[filtered["payer"].isin(fp)]
+    if fc != "Todas":
+        filtered = filtered[filtered["category_name"] == fc]
+    if ft != "Todos":
+        filtered = filtered[filtered["split_type"] == ft]
+
+    sm1, sm2, sm3 = st.columns(3)
+    sm1.metric("Total movimientos ($)", f"${filtered['amount'].sum():,.0f}")
+    sm2.metric("Transacciones", len(filtered))
+    sm3.metric("Promedio", f"${filtered['amount'].mean():,.0f}" if not filtered.empty else "$0.00")
+
+    st.markdown("")
+
+    TYPE_COLORS = {"personal": "#667eea", "shared": "#f6ad55", "for_other": "#fc8181"}
+    SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
+
+    for _, row in filtered.iterrows():
+        row_id = int(row["id"])
+        editing = st.session_state.get("edit_expense_id") == row_id
+
+        if editing:
+            st.markdown(
+                f"<div style='background:#252d42;border-radius:10px;padding:12px 16px;margin-bottom:4px'>"
+                f"<b>✏️ Editando:</b> {row['description']}</div>",
+                unsafe_allow_html=True,
+            )
+            with st.form(f"edit_expense_form_{row_id}"):
+                e_desc = st.text_input("Descripción", value=row["description"])
+
+                ef1, ef2 = st.columns(2)
+                cat_keys = list(cat_name_to_id.keys())
+                e_cat_name = ef1.selectbox(
+                    "Categoría", cat_keys,
+                    index=cat_keys.index(row["category_name"]) if row["category_name"] in cat_keys else 0,
+                )
+                e_payer = ef2.selectbox(
+                    "Pagó", db.PERSONS,
+                    index=db.PERSONS.index(row["payer"]),
+                    format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
+                )
+
+                ef3, ef4 = st.columns(2)
+                e_amount = ef3.number_input("Monto ($)", min_value=0.0,
+                                            value=float(row["amount"]), step=1.0, format="%.2f")
+                e_date = ef4.date_input(
+                    "Fecha real",
+                    value=date.fromisoformat(str(row["date"])[:10]),
+                )
+
+                split_keys = list(db.SPLIT_TYPES.keys())
+                e_split_type = st.selectbox(
+                    "Tipo de gasto", split_keys,
+                    index=split_keys.index(row["split_type"]) if row["split_type"] in split_keys else 0,
+                    format_func=lambda x: db.SPLIT_TYPES[x],
+                )
+
+                cur_pct = int(row["split_pct"]) if (row.get("split_pct") is not None
+                                                    and not pd.isna(row["split_pct"])) else 50
+                e_split_pct = st.slider(
+                    "% que paga el otro (solo para % Personalizado)",
+                    0, 100, cur_pct, step=5,
+                )
+
+                e_bm_val = row.get("budget_month")
+                e_by_val = row.get("budget_year")
+                has_override = (e_bm_val is not None
+                                and not (isinstance(e_bm_val, float) and pd.isna(e_bm_val)))
+                e_override = st.checkbox("📅 Asignar a un mes de presupuesto diferente",
+                                         value=has_override)
+                e_bm, e_by = None, None
+                if e_override:
+                    eo1, eo2 = st.columns(2)
+                    bm_idx = int(e_bm_val) - 1 if has_override else M - 1
+                    by_idx = years.index(int(e_by_val)) if has_override and int(e_by_val) in years else years.index(Y)
+                    e_bm_name = eo1.selectbox("Mes presupuesto", month_names, index=bm_idx,
+                                               key=f"ebm_{row_id}")
+                    e_by = eo2.selectbox("Año presupuesto", years, index=by_idx, key=f"eby_{row_id}")
+                    e_bm = months_inv[e_bm_name]
+
+                e_notes = st.text_area("Notas (opcional)",
+                                       value=row.get("notes") or "", height=55)
+
+                es1, es2 = st.columns(2)
+                save_edit   = es1.form_submit_button("💾 Actualizar", use_container_width=True, type="primary")
+                cancel_edit = es2.form_submit_button("✖ Cancelar",   use_container_width=True)
+
+                if save_edit:
+                    if not e_desc.strip():
+                        st.error("La descripción es requerida.")
+                    elif e_amount <= 0:
+                        st.error("El monto debe ser mayor a $0.")
+                    else:
+                        final_split_pct = float(e_split_pct) if e_split_type == "custom" else None
+                        db.update_expense(
+                            row_id,
+                            e_desc.strip(),
+                            cat_name_to_id[e_cat_name],
+                            e_payer,
+                            float(e_amount),
+                            e_split_type,
+                            e_date.isoformat(),
+                            e_notes.strip() or None,
+                            e_bm, e_by,
+                            final_split_pct,
+                        )
+                        db.delete_savings_by_expense(row_id)
+                        if e_cat_name in SAVINGS_CATS:
+                            amt    = float(e_amount)
+                            desc_s = f"{e_cat_name}: {e_desc.strip()}"
+                            other  = "AZ" if e_payer == "SG" else "SG"
+                            opct   = (float(e_split_pct) / 100) if e_split_type == "custom" else 0.5
+                            if e_split_type == "personal":
+                                db.add_savings_entry(e_payer, amt, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                            elif e_split_type == "shared":
+                                db.add_savings_entry(e_payer, amt * 0.5, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                db.add_savings_entry(other,   amt * 0.5, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                            elif e_split_type == "for_other":
+                                db.add_savings_entry(other, amt, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                            elif e_split_type == "custom":
+                                db.add_savings_entry(e_payer, amt * (1 - opct), "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                                db.add_savings_entry(other,   amt * opct,        "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
+                        st.session_state["edit_expense_id"] = None
+                        _clear_cache(); st.rerun()
+
+                if cancel_edit:
+                    st.session_state["edit_expense_id"] = None
+                    st.rerun()
+
+        else:
+            tc = TYPE_COLORS.get(row["split_type"], "#aaa")
+            tl = db.SPLIT_TYPES.get(row["split_type"], row["split_type"])
+
+            bm_info = ""
+            bm_val  = row.get("budget_month")
+            by_val  = row.get("budget_year")
+            if bm_val is not None and not (isinstance(bm_val, float) and pd.isna(bm_val)):
+                bm_label = db.MONTHS_ES.get(int(bm_val), "?")
+                bm_info  = f" · <span style='color:#3182ce;font-size:10px'>📅 Presup. {bm_label} {int(by_val)}</span>"
+
+            _nv = row.get("notes")
+            notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
+                          if _nv and isinstance(_nv, str) and _nv.strip() else "")
+
+            c_desc, c_tag, c_who, c_amt, c_edit, c_del = st.columns([3.5, 2, 1, 1.2, 0.4, 0.4])
+            c_desc.markdown(
+                f"**{row['description']}**"
+                f"<br><small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
+                f"{notes_html}",
+                unsafe_allow_html=True,
+            )
+            c_tag.markdown(
+                f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
+                unsafe_allow_html=True,
+            )
+            c_who.markdown(f"**{row['payer']}**")
+            c_amt.markdown(f"**${row['amount']:,.0f}**")
+            if c_edit.button("✏️", key=f"edit_e_{row_id}", help="Editar",
+                             use_container_width=True):
+                st.session_state["edit_expense_id"] = row_id
+                st.rerun()
+            if c_del.button("🗑", key=f"del_e_{row_id}", help="Eliminar",
+                            use_container_width=True):
+                db.delete_expense(row_id)
+                _clear_cache(); st.rerun()
+
+        st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
@@ -365,10 +572,10 @@ with tab_dash:
         st.markdown(f"**{row_label}**")
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("💼 Presupuesto",      f"${budget:,.0f}")
-        c2.metric("💸 Gastado",          f"${spent:,.0f}")
+        c2.metric("💸 Utilizado",         f"${spent:,.0f}")
         c3.metric("✅ Restante",         f"${rem:,.0f}")
         c4.metric("🎉 Presup. Diversión", f"${fun_budget:,.0f}")
-        c5.metric("🎉 Gastado Diversión", f"${fun_spent:,.0f}")
+        c5.metric("🎉 Utilizado Diversión", f"${fun_spent:,.0f}")
         c6.metric("🎉 Restante Diversión", f"${fun_rem:,.0f}")
 
     # Debt chip
@@ -423,7 +630,7 @@ with tab_dash:
         c_left, c_right = st.columns([3, 2])
 
         with c_left:
-            st.markdown('<div class="sec-head">Gastos Diarios</div>', unsafe_allow_html=True)
+            st.markdown('<div class="sec-head">Movimientos Diarios</div>', unsafe_allow_html=True)
             daily = _daily(M, Y)
             if not daily.empty:
                 if len(persons_dash) < 2:
@@ -475,7 +682,7 @@ with tab_dash:
                     )
                     st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
     else:
-        st.info("No hay gastos registrados para este mes. Empieza en la pestaña 💸 Gastos.")
+        st.info("No hay movimientos registrados para este mes. Empieza en la pestaña 💸 Movimientos.")
 
     st.divider()
 
@@ -551,7 +758,7 @@ with tab_dash:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  TAB 2 · GASTOS
+#  TAB 2 · MOVIMIENTOS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_gastos:
     _cats_df = _categories()
@@ -560,197 +767,12 @@ with tab_gastos:
     col_form, col_list = st.columns([1, 2], gap="large")
 
     with col_form:
-        st.markdown('<div class="sec-head">➕ Nuevo Gasto</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-head">➕ Nuevo Movimiento</div>', unsafe_allow_html=True)
         _new_expense_panel(M, Y, cat_name_to_id)
 
     with col_list:
-        st.markdown(f'<div class="sec-head">Gastos de {sel_month_name} {sel_year}</div>',
-                    unsafe_allow_html=True)
-
-        expenses = _expenses(M, Y)
-
-        if expenses.empty:
-            st.info("No hay gastos registrados para este mes.")
-        else:
-            cf1, cf2, cf3 = st.columns(3)
-            with cf1:
-                fp = st.multiselect("Persona", db.PERSONS,
-                                    format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}")
-            with cf2:
-                all_cats = ["Todas"] + sorted(expenses["category_name"].unique().tolist())
-                fc = st.selectbox("Categoría", all_cats)
-            with cf3:
-                all_types = ["Todos"] + list(db.SPLIT_TYPES.keys())
-                ft = st.selectbox("Tipo", all_types,
-                                  format_func=lambda x: "Todos" if x == "Todos" else db.SPLIT_TYPES[x])
-
-            filtered = expenses.copy()
-            if fp:
-                filtered = filtered[filtered["payer"].isin(fp)]
-            if fc != "Todas":
-                filtered = filtered[filtered["category_name"] == fc]
-            if ft != "Todos":
-                filtered = filtered[filtered["split_type"] == ft]
-
-            sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("Total pagado", f"${filtered['amount'].sum():,.0f}")
-            sm2.metric("Transacciones", len(filtered))
-            sm3.metric("Promedio", f"${filtered['amount'].mean():,.0f}" if not filtered.empty else "$0.00")
-
-            st.markdown("")
-
-            TYPE_COLORS = {"personal": "#667eea", "shared": "#f6ad55", "for_other": "#fc8181"}
-            SAVINGS_CATS = {"Spain Move Fund", "Emergency Savings", "Viajes"}
-
-            for _, row in filtered.iterrows():
-                row_id = int(row["id"])
-                editing = st.session_state.get("edit_expense_id") == row_id
-
-                if editing:
-                    st.markdown(
-                        f"<div style='background:#252d42;border-radius:10px;padding:12px 16px;margin-bottom:4px'>"
-                        f"<b>✏️ Editando:</b> {row['description']}</div>",
-                        unsafe_allow_html=True,
-                    )
-                    with st.form(f"edit_expense_form_{row_id}"):
-                        e_desc = st.text_input("Descripción", value=row["description"])
-
-                        ef1, ef2 = st.columns(2)
-                        cat_keys = list(cat_name_to_id.keys())
-                        e_cat_name = ef1.selectbox(
-                            "Categoría", cat_keys,
-                            index=cat_keys.index(row["category_name"]) if row["category_name"] in cat_keys else 0,
-                        )
-                        e_payer = ef2.selectbox(
-                            "Pagó", db.PERSONS,
-                            index=db.PERSONS.index(row["payer"]),
-                            format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
-                        )
-
-                        ef3, ef4 = st.columns(2)
-                        e_amount = ef3.number_input("Monto ($)", min_value=0.0,
-                                                    value=float(row["amount"]), step=1.0, format="%.2f")
-                        e_date = ef4.date_input(
-                            "Fecha real",
-                            value=date.fromisoformat(str(row["date"])[:10]),
-                        )
-
-                        split_keys = list(db.SPLIT_TYPES.keys())
-                        e_split_type = st.selectbox(
-                            "Tipo de gasto", split_keys,
-                            index=split_keys.index(row["split_type"]) if row["split_type"] in split_keys else 0,
-                            format_func=lambda x: db.SPLIT_TYPES[x],
-                        )
-
-                        cur_pct = int(row["split_pct"]) if (row.get("split_pct") is not None
-                                                            and not pd.isna(row["split_pct"])) else 50
-                        e_split_pct = st.slider(
-                            "% que paga el otro (solo para % Personalizado)",
-                            0, 100, cur_pct, step=5,
-                        )
-
-                        e_bm_val = row.get("budget_month")
-                        e_by_val = row.get("budget_year")
-                        has_override = (e_bm_val is not None
-                                        and not (isinstance(e_bm_val, float) and pd.isna(e_bm_val)))
-                        e_override = st.checkbox("📅 Asignar a un mes de presupuesto diferente",
-                                                 value=has_override)
-                        e_bm, e_by = None, None
-                        if e_override:
-                            eo1, eo2 = st.columns(2)
-                            bm_idx = int(e_bm_val) - 1 if has_override else M - 1
-                            by_idx = years.index(int(e_by_val)) if has_override and int(e_by_val) in years else years.index(Y)
-                            e_bm_name = eo1.selectbox("Mes presupuesto", month_names, index=bm_idx,
-                                                       key=f"ebm_{row_id}")
-                            e_by = eo2.selectbox("Año presupuesto", years, index=by_idx, key=f"eby_{row_id}")
-                            e_bm = months_inv[e_bm_name]
-
-                        e_notes = st.text_area("Notas (opcional)",
-                                               value=row.get("notes") or "", height=55)
-
-                        es1, es2 = st.columns(2)
-                        save_edit   = es1.form_submit_button("💾 Actualizar", use_container_width=True, type="primary")
-                        cancel_edit = es2.form_submit_button("✖ Cancelar",   use_container_width=True)
-
-                        if save_edit:
-                            if not e_desc.strip():
-                                st.error("La descripción es requerida.")
-                            elif e_amount <= 0:
-                                st.error("El monto debe ser mayor a $0.")
-                            else:
-                                final_split_pct = float(e_split_pct) if e_split_type == "custom" else None
-                                db.update_expense(
-                                    row_id,
-                                    e_desc.strip(),
-                                    cat_name_to_id[e_cat_name],
-                                    e_payer,
-                                    float(e_amount),
-                                    e_split_type,
-                                    e_date.isoformat(),
-                                    e_notes.strip() or None,
-                                    e_bm, e_by,
-                                    final_split_pct,
-                                )
-                                # Re-link savings entries
-                                db.delete_savings_by_expense(row_id)
-                                if e_cat_name in SAVINGS_CATS:
-                                    amt    = float(e_amount)
-                                    desc_s = f"{e_cat_name}: {e_desc.strip()}"
-                                    other  = "AZ" if e_payer == "SG" else "SG"
-                                    opct   = (float(e_split_pct) / 100) if e_split_type == "custom" else 0.5
-                                    if e_split_type == "personal":
-                                        db.add_savings_entry(e_payer, amt, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
-                                    elif e_split_type == "shared":
-                                        db.add_savings_entry(e_payer, amt * 0.5, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
-                                        db.add_savings_entry(other,   amt * 0.5, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
-                                    elif e_split_type == "for_other":
-                                        db.add_savings_entry(other, amt, "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
-                                    elif e_split_type == "custom":
-                                        db.add_savings_entry(e_payer, amt * (1 - opct), "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
-                                        db.add_savings_entry(other,   amt * opct,        "deposit", desc_s, e_date.isoformat(), expense_id=row_id)
-                                st.session_state["edit_expense_id"] = None
-                                _clear_cache(); st.rerun()
-
-                        if cancel_edit:
-                            st.session_state["edit_expense_id"] = None
-                            st.rerun()
-
-                else:
-                    tc = TYPE_COLORS.get(row["split_type"], "#aaa")
-                    tl = db.SPLIT_TYPES.get(row["split_type"], row["split_type"])
-
-                    bm_info = ""
-                    bm_val  = row.get("budget_month")
-                    by_val  = row.get("budget_year")
-                    if bm_val is not None and not (isinstance(bm_val, float) and pd.isna(bm_val)):
-                        bm_label = db.MONTHS_ES.get(int(bm_val), "?")
-                        bm_info  = f" · <span style='color:#3182ce;font-size:10px'>📅 Presup. {bm_label} {int(by_val)}</span>"
-
-                    _nv = row.get("notes")
-                    notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
-                                  if _nv and isinstance(_nv, str) and _nv.strip() else "")
-
-                    c_desc, c_tag, c_who, c_amt, c_edit, c_del = st.columns([3.5, 2, 1, 1.2, 0.4, 0.4])
-                    c_desc.markdown(
-                        f"**{row['description']}**"
-                        f"<br><small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
-                        f"{notes_html}",
-                        unsafe_allow_html=True,
-                    )
-                    c_tag.markdown(
-                        f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
-                        unsafe_allow_html=True,
-                    )
-                    c_who.markdown(f"**{row['payer']}**")
-                    c_amt.markdown(f"**${row['amount']:,.0f}**")
-                    if c_edit.button("✏️", key=f"edit_e_{row_id}", help="Editar"):
-                        st.session_state["edit_expense_id"] = row_id
-                        st.rerun()
-                    if c_del.button("🗑", key=f"del_e_{row_id}", help="Eliminar"):
-                        db.delete_expense(row_id)
-                        _clear_cache(); st.rerun()
-
-                st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
+        _expense_list_panel(M, Y, cat_name_to_id, sel_month_name, sel_year,
+                            years, month_names, months_inv)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -809,69 +831,67 @@ with tab_presup:
     st.divider()
 
     # ── Category management ───────────────────────────────────────────────────
-    st.markdown('<div class="sec-head">⚙️ Gestionar Categorías</div>', unsafe_allow_html=True)
+    with st.expander("⚙️ Gestionar Categorías", expanded=False):
+        cat_col_new, cat_col_list = st.columns([1, 2], gap="large")
 
-    cat_col_new, cat_col_list = st.columns([1, 2], gap="large")
-
-    with cat_col_new:
-        st.markdown("**Nueva categoría**")
-        with st.form("new_category_form", clear_on_submit=True):
-            new_cat_name  = st.text_input("Nombre", placeholder="Ej: Mascotas, Médico…")
-            new_cat_color = st.color_picker("Color", value="#667eea")
-            if st.form_submit_button("➕ Crear categoría", use_container_width=True, type="primary"):
-                ok, msg = db.add_category(new_cat_name, new_cat_color)
-                if ok:
-                    st.success(msg)
-                    _clear_cache(); st.rerun()
-                else:
-                    st.error(msg)
-
-    with cat_col_list:
-        st.markdown("**Categorías existentes**")
-        all_cats = _categories()
-        default_names = {c[0] for c in db.DEFAULT_CATEGORIES}
-        edit_cat_id = st.session_state.get("edit_cat_id")
-
-        for _, cat in all_cats.iterrows():
-            is_default = cat["name"] in default_names
-            cat_id_int = int(cat["id"])
-
-            if edit_cat_id == cat_id_int:
-                # Inline edit row
-                ec1, ec2, ec3, ec4 = st.columns([2.5, 1.5, 0.5, 0.5])
-                new_name  = ec1.text_input("Nombre", value=cat["name"],
-                                           key=f"ecn_{cat_id_int}", label_visibility="collapsed")
-                new_color = ec2.color_picker("Color", value=cat["color"],
-                                             key=f"ecc_{cat_id_int}", label_visibility="collapsed")
-                if ec3.button("✅", key=f"save_cat_{cat_id_int}", help="Guardar"):
-                    ok, msg = db.update_category(cat_id_int, new_name.strip(), new_color)
+        with cat_col_new:
+            st.markdown("**Nueva categoría**")
+            with st.form("new_category_form", clear_on_submit=True):
+                new_cat_name  = st.text_input("Nombre", placeholder="Ej: Mascotas, Médico…")
+                new_cat_color = st.color_picker("Color", value="#667eea")
+                if st.form_submit_button("➕ Crear categoría", use_container_width=True, type="primary"):
+                    ok, msg = db.add_category(new_cat_name, new_cat_color)
                     if ok:
-                        st.session_state["edit_cat_id"] = None
+                        st.success(msg)
                         _clear_cache(); st.rerun()
                     else:
                         st.error(msg)
-                if ec4.button("✖", key=f"cancel_cat_{cat_id_int}", help="Cancelar"):
-                    st.session_state["edit_cat_id"] = None
-                    _clear_cache(); st.rerun()
-            else:
-                c1, c2, c3, c4 = st.columns([0.4, 2.8, 0.7, 0.7])
-                c1.markdown(
-                    f"<div style='width:18px;height:18px;border-radius:50%;"
-                    f"background:{cat['color']};margin-top:6px'></div>",
-                    unsafe_allow_html=True,
-                )
-                c2.markdown(cat["name"])
-                if c3.button("✏️", key=f"edit_cat_{cat_id_int}", help="Editar nombre y color"):
-                    st.session_state["edit_cat_id"] = cat_id_int
-                    _clear_cache(); st.rerun()
-                if not is_default:
-                    if c4.button("🗑", key=f"del_cat_{cat_id_int}", help="Eliminar categoría"):
-                        ok, msg = db.delete_category(cat_id_int)
+
+        with cat_col_list:
+            st.markdown("**Categorías existentes**")
+            all_cats = _categories()
+            default_names = {c[0] for c in db.DEFAULT_CATEGORIES}
+            edit_cat_id = st.session_state.get("edit_cat_id")
+
+            for _, cat in all_cats.iterrows():
+                is_default = cat["name"] in default_names
+                cat_id_int = int(cat["id"])
+
+                if edit_cat_id == cat_id_int:
+                    ec1, ec2, ec3, ec4 = st.columns([2.5, 1.5, 0.5, 0.5])
+                    new_name  = ec1.text_input("Nombre", value=cat["name"],
+                                               key=f"ecn_{cat_id_int}", label_visibility="collapsed")
+                    new_color = ec2.color_picker("Color", value=cat["color"],
+                                                 key=f"ecc_{cat_id_int}", label_visibility="collapsed")
+                    if ec3.button("✅", key=f"save_cat_{cat_id_int}", help="Guardar"):
+                        ok, msg = db.update_category(cat_id_int, new_name.strip(), new_color)
                         if ok:
-                            st.success(msg)
+                            st.session_state["edit_cat_id"] = None
                             _clear_cache(); st.rerun()
                         else:
-                            st.warning(msg)
+                            st.error(msg)
+                    if ec4.button("✖", key=f"cancel_cat_{cat_id_int}", help="Cancelar"):
+                        st.session_state["edit_cat_id"] = None
+                        _clear_cache(); st.rerun()
+                else:
+                    c1, c2, c3, c4 = st.columns([0.4, 2.8, 0.7, 0.7])
+                    c1.markdown(
+                        f"<div style='width:18px;height:18px;border-radius:50%;"
+                        f"background:{cat['color']};margin-top:6px'></div>",
+                        unsafe_allow_html=True,
+                    )
+                    c2.markdown(cat["name"])
+                    if c3.button("✏️", key=f"edit_cat_{cat_id_int}", help="Editar nombre y color"):
+                        st.session_state["edit_cat_id"] = cat_id_int
+                        _clear_cache(); st.rerun()
+                    if not is_default:
+                        if c4.button("🗑", key=f"del_cat_{cat_id_int}", help="Eliminar categoría"):
+                            ok, msg = db.delete_category(cat_id_int)
+                            if ok:
+                                st.success(msg)
+                                _clear_cache(); st.rerun()
+                            else:
+                                st.warning(msg)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
