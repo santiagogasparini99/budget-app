@@ -477,7 +477,7 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
                 "over":    max(0.0, spent - budget),
                 "total":   spent,
                 "pct":     pct,
-                "color":   "#b03a3a" if spent > budget else ("#b07a2a" if pct >= 80 else "#4a5bb8"),
+                "color":   "#b03a3a" if spent > budget else ("#38a169" if pct >= 100 else ("#b07a2a" if pct >= 80 else "#4a5bb8")),
             })
 
     if not rows:
