@@ -186,7 +186,7 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
                              format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}",
                              key=f"nexp_payer_{fk}")
     nc3, nc4 = st.columns(2)
-    amount       = nc3.number_input("Monto ($)", min_value=0.0, value=None, step=1000.0,
+    amount       = nc3.number_input("Monto ($)", min_value=0.0, value=None, step=1.0,
                                     format="%.0f", key=f"nexp_amount_{fk}")
     expense_date = nc4.date_input("Fecha real", value=date.today(), key=f"nexp_date_{fk}")
 
