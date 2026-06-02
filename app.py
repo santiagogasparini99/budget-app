@@ -67,7 +67,7 @@ def _clear_cache():
 
 st.set_page_config(
     page_title="El jardín 🪲 · SG & AZ",
-    page_icon="🪲",
+    page_icon="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1fab2.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -83,11 +83,13 @@ except Exception as _db_err:
 st.markdown("""
 <script>
 (function() {
-  var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#1a1f2e"/><text y=".9em" font-size="72" x="12">🪲</text></svg>';
-  var url = 'data:image/svg+xml,' + encodeURIComponent(svg);
+  // Borrar cualquier apple-touch-icon existente (ej: el de Streamlit)
+  document.querySelectorAll('link[rel*="apple-touch-icon"]').forEach(function(l){ l.parentNode.removeChild(l); });
+  // Agregar el nuestro con PNG del emoji 🪲 (Twemoji CDN)
   var link = document.createElement('link');
-  link.rel = 'apple-touch-icon';
-  link.href = url;
+  link.rel  = 'apple-touch-icon';
+  link.sizes = '180x180';
+  link.href = 'https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1fab2.png';
   document.head.appendChild(link);
 })();
 </script>
