@@ -406,7 +406,7 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
                           if _nv and isinstance(_nv, str) and _nv.strip() else "")
 
-            c_desc, c_tag, c_who, c_amt, c_edit, c_del = st.columns([3.5, 2, 1, 1.2, 0.4, 0.4])
+            c_desc, c_tag, c_who, c_amt, c_btns = st.columns([3.5, 2, 1, 1.2, 0.85])
             c_desc.markdown(
                 f"**{row['description']}**"
                 f"<br><small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
@@ -419,14 +419,16 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             )
             c_who.markdown(f"**{row['payer']}**")
             c_amt.markdown(f"**${row['amount']:,.0f}**")
-            if c_edit.button("✏️", key=f"edit_e_{row_id}", help="Editar",
+            with c_btns:
+                b1, b2 = st.columns(2)
+                if b1.button("✏️", key=f"edit_e_{row_id}", help="Editar",
                              use_container_width=True):
-                st.session_state["edit_expense_id"] = row_id
-                st.rerun()
-            if c_del.button("🗑", key=f"del_e_{row_id}", help="Eliminar",
-                            use_container_width=True):
-                db.delete_expense(row_id)
-                _clear_cache(); st.rerun()
+                    st.session_state["edit_expense_id"] = row_id
+                    st.rerun()
+                if b2.button("🗑", key=f"del_e_{row_id}", help="Eliminar",
+                             use_container_width=True):
+                    db.delete_expense(row_id)
+                    _clear_cache(); st.rerun()
 
         st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
