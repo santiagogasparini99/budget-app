@@ -1217,6 +1217,9 @@ with tab_ahorros:
 # ══════════════════════════════════════════════════════════════════════════════
 @st.fragment
 def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
+    if st.session_state.pop("balloons_ingresos", False):
+        st.balloons()
+
     st.markdown(f"## 💵 Ingresos · {sel_month_name} {sel_year}")
 
     income_data = _monthly_income(M, Y)
@@ -1280,8 +1283,7 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                                             float(ni_amount), ni_date.isoformat(),
                                             ni_notes.strip() or None)
                         _clear_cache()
-                        st.balloons()
-                        st.rerun()
+                        st.session_state["balloons_ingresos"] = True
 
         if extras_df.empty:
             st.caption("Sin ingresos adicionales este mes.")
