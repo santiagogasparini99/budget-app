@@ -445,7 +445,7 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             meta = f"<small style='color:#888'>{row['category_name']} · {row['date']}{bm_info}</small>"
             if _nv and isinstance(_nv, str) and _nv.strip():
                 meta += f"<small style='color:#aaa'> · {_nv}</small>"
-            st.markdown(f"<div style='margin-top:-14px'>{meta}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='margin-top:-22px'>{meta}</div>", unsafe_allow_html=True)
 
         st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
