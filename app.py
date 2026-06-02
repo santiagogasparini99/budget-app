@@ -33,6 +33,12 @@ def _savings_bal(person):        return db.get_savings_balance(person)
 @st.cache_data(ttl=30, show_spinner=False)
 def _savings_entries(person=None): return db.get_savings(person)
 
+@st.cache_data(ttl=30, show_spinner=False)
+def _monthly_income(m, y): return db.get_monthly_income(m, y)
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _income_entries(m, y): return db.get_income_entries(m, y)
+
 def _spending(m, y):
     return db.calculate_spending_by_person_category(m, y, expenses=_expenses(m, y))
 
@@ -56,6 +62,7 @@ def _clear_cache():
     _settlements.clear(); _all_settlements.clear()
     _manual_debts.clear(); _categories.clear()
     _savings_bal.clear(); _savings_entries.clear()
+    _monthly_income.clear(); _income_entries.clear()
 
 st.set_page_config(
     page_title="El jardín 🪲 · SG & AZ",
@@ -433,8 +440,8 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_gastos, tab_presup, tab_dash, tab_deudas, tab_ahorros = st.tabs(
-    ["💸  Movimientos", "📋  Presupuesto", "📊  Dashboard", "🤝  Deudas", "💰  Ahorros"]
+tab_gastos, tab_presup, tab_dash, tab_deudas, tab_ahorros, tab_ingresos = st.tabs(
+    ["💸  Movimientos", "📋  Presupuesto", "📊  Dashboard", "🤝  Deudas", "💰  Ahorros", "💵  Ingresos"]
 )
 
 
@@ -545,7 +552,22 @@ with tab_dash:
     st.divider()
 
     # ── KPI cards — una fila por Santiago, Alex y Ambos ──────────────────────
-    FUN_CATS = ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"]
+    KPI_GROUPS = {
+        "Todas":      None,
+        "Diversión":  ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
+        "Hogar":      ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
+        "Ahorro":     ["Spain Move Fund", "Emergency Savings", "Viajes"],
+    }
+    income_data  = _monthly_income(M, Y)
+    income_extra = _income_entries(M, Y)
+
+    kpi_hdr, kpi_sel = st.columns([4, 2])
+    kpi_hdr.markdown("##### Resumen por grupo")
+    kpi_group = kpi_sel.selectbox(
+        "Grupo KPI", list(KPI_GROUPS.keys()),
+        label_visibility="collapsed", key="kpi_group",
+    )
+    kpi_filter = KPI_GROUPS[kpi_group]
 
     if dash_filter == "Santiago (SG)":
         kpi_rows = [("Santiago", ["SG"])]
@@ -555,28 +577,44 @@ with tab_dash:
         kpi_rows = [("Santiago", ["SG"]), ("Alex", ["AZ"]), ("Ambos", ["SG", "AZ"])]
 
     for row_label, row_persons in kpi_rows:
-        budget = (sum(budgets_df[f"budget_{p}"].sum() for p in row_persons)
-                  if not budgets_df.empty else 0.0)
-        spent  = (spending_df[spending_df["person"].isin(row_persons)]["spent"].sum()
-                  if not spending_df.empty else 0.0)
+        bdf_kpi = (budgets_df[budgets_df["category_name"].isin(kpi_filter)]
+                   if kpi_filter and not budgets_df.empty else budgets_df)
+        spdf_kpi = (spending_df[spending_df["category_name"].isin(kpi_filter)]
+                    if kpi_filter and not spending_df.empty else spending_df)
+
+        budget = (sum(bdf_kpi[f"budget_{p}"].sum() for p in row_persons)
+                  if not bdf_kpi.empty else 0.0)
+        spent  = (spdf_kpi[spdf_kpi["person"].isin(row_persons)]["spent"].sum()
+                  if not spdf_kpi.empty else 0.0)
         rem    = budget - spent
 
-        fun_bdf    = budgets_df[budgets_df["category_name"].isin(FUN_CATS)] if not budgets_df.empty else budgets_df
-        fun_budget = sum(fun_bdf[f"budget_{p}"].sum() for p in row_persons) if not fun_bdf.empty else 0.0
-        fun_spent  = (spending_df[
-                          spending_df["person"].isin(row_persons) &
-                          spending_df["category_name"].isin(FUN_CATS)
-                      ]["spent"].sum() if not spending_df.empty else 0.0)
-        fun_rem = fun_budget - fun_spent
+        salary     = sum(income_data.get(p, 0.0) for p in row_persons)
+        extras     = (income_extra[income_extra["person"].isin(row_persons)]["amount"].sum()
+                      if not income_extra.empty else 0.0)
+        total_inc  = salary + extras
+        total_spent_all = (spending_df[spending_df["person"].isin(row_persons)]["spent"].sum()
+                           if not spending_df.empty else 0.0)
+        disponible = total_inc - total_spent_all
 
         st.markdown(f"**{row_label}**")
+
+        if total_inc > 0:
+            i1, i2, i3, i4 = st.columns(4)
+            i1.metric("💵 Sueldo",        f"${salary:,.0f}")
+            i2.metric("💵 Extras",         f"${extras:,.0f}")
+            i3.metric("💵 Total ingresos", f"${total_inc:,.0f}")
+            i4.metric("💰 Disponible",     f"${disponible:,.0f}",
+                      delta=f"${disponible:,.0f}", delta_color="normal")
+            st.markdown("")
+
+        group_label = kpi_group if kpi_filter else "Total"
         c1, c2, c3, c4, c5, c6 = st.columns(6)
-        c1.metric("💼 Presupuesto",      f"${budget:,.0f}")
-        c2.metric("💸 Utilizado",         f"${spent:,.0f}")
-        c3.metric("✅ Restante",         f"${rem:,.0f}")
-        c4.metric("🎉 Presup. Diversión", f"${fun_budget:,.0f}")
-        c5.metric("🎉 Utilizado Diversión", f"${fun_spent:,.0f}")
-        c6.metric("🎉 Restante Diversión", f"${fun_rem:,.0f}")
+        c1.metric(f"💼 Presup. {group_label}",    f"${budget:,.0f}")
+        c2.metric(f"💸 Utilizado {group_label}",   f"${spent:,.0f}")
+        c3.metric(f"✅ Restante {group_label}",    f"${rem:,.0f}")
+        c4.metric("💼 Presup. Total",  f"${sum(budgets_df[f'budget_{p}'].sum() for p in row_persons) if not budgets_df.empty else 0.0:,.0f}")
+        c5.metric("💸 Utilizado Total", f"${total_spent_all:,.0f}")
+        c6.metric("✅ Restante Total",  f"${(sum(budgets_df[f'budget_{p}'].sum() for p in row_persons) if not budgets_df.empty else 0.0) - total_spent_all:,.0f}")
 
     # Debt chip
     st.markdown("")
@@ -1181,3 +1219,148 @@ with tab_ahorros:
                         _clear_cache(); st.rerun()
                     st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>",
                                 unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  TAB 6 · INGRESOS
+# ══════════════════════════════════════════════════════════════════════════════
+@st.fragment
+def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
+    st.markdown(f"## 💵 Ingresos · {sel_month_name} {sel_year}")
+
+    income_data = _monthly_income(M, Y)
+    extras_df   = _income_entries(M, Y)
+
+    col_salary, col_extras = st.columns([1, 2], gap="large")
+
+    # ── Sueldo mensual ────────────────────────────────────────────────────────
+    with col_salary:
+        st.markdown('<div class="sec-head">💼 Sueldo mensual</div>', unsafe_allow_html=True)
+        with st.form("salary_form"):
+            vals = {}
+            for p in db.PERSONS:
+                vals[p] = st.number_input(
+                    f"{p} · {db.PERSON_NAMES[p]}",
+                    min_value=0.0,
+                    value=income_data.get(p, 0.0),
+                    step=1000.0, format="%.0f",
+                    key=f"sal_{p}",
+                )
+            if st.form_submit_button("💾 Guardar sueldos", use_container_width=True, type="primary"):
+                for p in db.PERSONS:
+                    db.set_monthly_income(p, float(vals[p]), M, Y)
+                _clear_cache(); st.rerun()
+
+        st.markdown("")
+        st.markdown('<div class="sec-head">📊 Resumen del mes</div>', unsafe_allow_html=True)
+        for p in db.PERSONS:
+            sal   = income_data.get(p, 0.0)
+            extra = (extras_df[extras_df["person"] == p]["amount"].sum()
+                     if not extras_df.empty else 0.0)
+            total = sal + extra
+            st.markdown(
+                f"**{db.PERSON_NAMES[p]}** — "
+                f"<span style='color:#68d391'>💵 ${total:,.0f}</span> "
+                f"<small style='color:#888'>(sueldo ${sal:,.0f} + extras ${extra:,.0f})</small>",
+                unsafe_allow_html=True,
+            )
+
+    # ── Ingresos adicionales ──────────────────────────────────────────────────
+    with col_extras:
+        st.markdown('<div class="sec-head">➕ Ingresos adicionales</div>', unsafe_allow_html=True)
+
+        with st.expander("➕ Nuevo ingreso adicional"):
+            with st.form("new_income_form", clear_on_submit=True):
+                ni_desc   = st.text_input("Descripción", placeholder="Ej: Freelance, bono…")
+                ni1, ni2  = st.columns(2)
+                ni_person = ni1.selectbox("Persona", db.PERSONS,
+                                          format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}")
+                ni_amount = ni2.number_input("Monto ($)", min_value=0.01,
+                                             value=None, step=1.0, format="%.0f")
+                ni_date   = st.date_input("Fecha", value=date.today())
+                ni_notes  = st.text_input("Notas (opcional)", placeholder="")
+                if st.form_submit_button("➕ Agregar", use_container_width=True, type="primary"):
+                    if not ni_desc.strip():
+                        st.error("La descripción es requerida.")
+                    elif not ni_amount or ni_amount <= 0:
+                        st.error("El monto debe ser mayor a $0.")
+                    else:
+                        db.add_income_entry(ni_person, ni_desc.strip(),
+                                            float(ni_amount), ni_date.isoformat(),
+                                            ni_notes.strip() or None)
+                        _clear_cache(); st.rerun()
+
+        if extras_df.empty:
+            st.caption("Sin ingresos adicionales este mes.")
+        else:
+            total_extras = extras_df["amount"].sum()
+            st.markdown(
+                f"<small style='color:#888'>Total extras: "
+                f"<b style='color:#68d391'>${total_extras:,.0f}</b></small>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("")
+
+            editing_inc = st.session_state.get("edit_income_id")
+
+            for _, row in extras_df.iterrows():
+                row_id = int(row["id"])
+
+                if editing_inc == row_id:
+                    st.markdown(
+                        f"<div style='background:#252d42;border-radius:10px;"
+                        f"padding:10px 14px;margin-bottom:4px'>"
+                        f"<b>✏️ Editando:</b> {row['description']}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    with st.form(f"edit_inc_{row_id}"):
+                        ei_desc   = st.text_input("Descripción", value=row["description"])
+                        ei1, ei2  = st.columns(2)
+                        ei_amount = ei1.number_input("Monto ($)", min_value=0.01,
+                                                     value=float(row["amount"]),
+                                                     step=1.0, format="%.0f")
+                        ei_date   = ei2.date_input("Fecha",
+                                                   value=date.fromisoformat(str(row["date"])[:10]))
+                        ei_notes  = st.text_input("Notas", value=row.get("notes") or "")
+                        es1, es2  = st.columns(2)
+                        if es1.form_submit_button("💾 Guardar", use_container_width=True, type="primary"):
+                            db.update_income_entry(row_id, ei_desc.strip(),
+                                                   float(ei_amount), ei_date.isoformat(),
+                                                   ei_notes.strip() or None)
+                            st.session_state["edit_income_id"] = None
+                            _clear_cache(); st.rerun()
+                        if es2.form_submit_button("✖ Cancelar", use_container_width=True):
+                            st.session_state["edit_income_id"] = None
+                            st.rerun()
+                else:
+                    _nv = row.get("notes")
+                    notes_html = (f"<br><small style='color:#aaa'>{_nv}</small>"
+                                  if _nv and isinstance(_nv, str) and _nv.strip() else "")
+                    c1, c2, c3, c4, c5 = st.columns([0.8, 2.5, 1.2, 0.4, 0.4])
+                    c1.markdown(f"**{row['person']}**")
+                    c2.markdown(
+                        f"**{row['description']}**"
+                        f"<br><small style='color:#888'>{row['date']}</small>"
+                        f"{notes_html}",
+                        unsafe_allow_html=True,
+                    )
+                    c3.markdown(
+                        f"<span style='color:#68d391;font-weight:700'>"
+                        f"+${row['amount']:,.0f}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    if c4.button("✏️", key=f"edit_inc_{row_id}", help="Editar",
+                                 use_container_width=True):
+                        st.session_state["edit_income_id"] = row_id
+                        st.rerun()
+                    if c5.button("🗑", key=f"del_inc_{row_id}", help="Eliminar",
+                                 use_container_width=True):
+                        db.delete_income_entry(row_id)
+                        _clear_cache(); st.rerun()
+
+                st.markdown("<hr style='margin:2px 0;border-color:#f5f5f5'>",
+                            unsafe_allow_html=True)
+
+
+with tab_ingresos:
+    _ingresos_panel(M, Y, sel_month_name, sel_year)

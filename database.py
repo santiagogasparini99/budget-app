@@ -197,6 +197,28 @@ def init_db():
             )
         """)
 
+        _run(conn, """
+            CREATE TABLE IF NOT EXISTS income_monthly (
+                id      SERIAL PRIMARY KEY,
+                person  TEXT NOT NULL,
+                amount  REAL NOT NULL DEFAULT 0,
+                month   INTEGER NOT NULL,
+                year    INTEGER NOT NULL,
+                UNIQUE(person, month, year)
+            )
+        """)
+        _run(conn, """
+            CREATE TABLE IF NOT EXISTS income_extra (
+                id          SERIAL PRIMARY KEY,
+                person      TEXT NOT NULL,
+                description TEXT NOT NULL,
+                amount      REAL NOT NULL,
+                date        TEXT NOT NULL,
+                notes       TEXT,
+                created_at  TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
         # Safe column migrations for existing databases
         for col, definition in [
             ("budget_month",  "INTEGER"),
@@ -604,6 +626,64 @@ def get_savings_balance(person: str) -> float:
 def delete_savings_entry(entry_id: int):
     with get_conn() as conn:
         _run(conn, "DELETE FROM savings WHERE id=%s", (entry_id,))
+
+
+# ─── Income ───────────────────────────────────────────────────────────────────
+def set_monthly_income(person: str, amount: float, month: int, year: int):
+    with get_conn() as conn:
+        _run(conn, """
+            INSERT INTO income_monthly (person, amount, month, year)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT(person, month, year)
+            DO UPDATE SET amount = EXCLUDED.amount
+        """, (person, amount, month, year))
+
+
+def get_monthly_income(month: int, year: int) -> dict:
+    with get_conn() as conn:
+        rows = _df(conn,
+            "SELECT person, amount FROM income_monthly WHERE month=%s AND year=%s",
+            (month, year))
+    result = {p: 0.0 for p in PERSONS}
+    if not rows.empty:
+        for _, r in rows.iterrows():
+            result[r["person"]] = float(r["amount"])
+    return result
+
+
+def add_income_entry(person: str, description: str, amount: float,
+                     entry_date: str, notes: str = None) -> int:
+    with get_conn() as conn:
+        cur = _run(conn,
+            "INSERT INTO income_extra (person, description, amount, date, notes) "
+            "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+            (person, description, amount, entry_date, notes))
+        return int(cur.fetchone()[0])
+
+
+def get_income_entries(month: int = None, year: int = None) -> pd.DataFrame:
+    with get_conn() as conn:
+        query = "SELECT * FROM income_extra"
+        params: list = []
+        if month is not None and year is not None:
+            query += (" WHERE EXTRACT(MONTH FROM date::date)=%s"
+                      "   AND EXTRACT(YEAR  FROM date::date)=%s")
+            params = [month, year]
+        query += " ORDER BY date DESC, created_at DESC"
+        return _df(conn, query, params)
+
+
+def update_income_entry(entry_id: int, description: str, amount: float,
+                        entry_date: str, notes: str = None):
+    with get_conn() as conn:
+        _run(conn,
+            "UPDATE income_extra SET description=%s, amount=%s, date=%s, notes=%s WHERE id=%s",
+            (description, amount, entry_date, notes, entry_id))
+
+
+def delete_income_entry(entry_id: int):
+    with get_conn() as conn:
+        _run(conn, "DELETE FROM income_extra WHERE id=%s", (entry_id,))
 
 
 # ─── Excel Export ─────────────────────────────────────────────────────────────
