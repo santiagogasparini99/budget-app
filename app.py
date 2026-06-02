@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -1278,7 +1279,14 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                         db.add_income_entry(ni_person, ni_desc.strip(),
                                             float(ni_amount), ni_date.isoformat(),
                                             ni_notes.strip() or None)
-                        _clear_cache(); st.rerun()
+                        _clear_cache()
+                        components.html("""
+                        <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>
+                        <script>
+                        confetti({ particleCount: 150, spread: 80, origin: { y: 0.5 }, colors: ['#667eea','#68d391','#f6ad55','#fc8181','#f093fb'] });
+                        </script>
+                        """, height=0)
+                        st.rerun()
 
         if extras_df.empty:
             st.caption("Sin ingresos adicionales este mes.")
