@@ -115,9 +115,24 @@ st.markdown("""
 
   hr { border-color: #2d3748 !important; }
 
-  /* Centrar emojis dentro de botones de icono */
-  div[data-testid="stButton"] button { justify-content: center !important; }
-  div[data-testid="stButton"] button p { text-align: center !important; width: 100%; margin: 0; }
+  /* Centrar emojis en botones de icono */
+  div[data-testid="stButton"] button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.25rem !important;
+  }
+  div[data-testid="stButton"] button div[data-testid="stMarkdownContainer"] {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
+  }
+  div[data-testid="stButton"] button p {
+    margin: 0 !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+  }
 </style>
 """, unsafe_allow_html=True)
 
