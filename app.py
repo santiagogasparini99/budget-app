@@ -621,7 +621,7 @@ with tab_dash:
             i3.metric("💵 Total ingresos", f"${total_inc:,.0f}",
                       help="Sueldo + Extras")
             i4.metric("💰 Disponible = Ing. − Util.", f"${disponible:,.0f}",
-                      help=f"Total ingresos (${total_inc:,.0f}) menos todo lo gastado en el mes (${spent_all:,.0f})")
+                      help=f"Total ingresos {total_inc:,.0f} menos lo gastado en el mes {spent_all:,.0f}")
             st.markdown("")
 
         c1, c2, c3 = st.columns(3)
@@ -630,7 +630,7 @@ with tab_dash:
         c2.metric(f"💸 Utilizado",          f"${spent:,.0f}",
                   help=f"Lo gastado dentro del grupo «{kpi_group}» este mes")
         c3.metric(f"✅ Restante = Presup. − Util.", f"${rem:,.0f}",
-                  help=f"Presupuesto (${budget:,.0f}) menos lo utilizado (${spent:,.0f}) en «{kpi_group}»")
+                  help=f"Presupuesto {budget:,.0f} menos lo utilizado {spent:,.0f} en «{kpi_group}»")
 
     # Debt chip
     st.markdown("")
