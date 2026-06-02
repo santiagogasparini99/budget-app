@@ -572,7 +572,7 @@ with tab_dash:
     elif dash_filter == "Alex (AZ)":
         kpi_rows = [("Alex", ["AZ"])]
     else:
-        kpi_rows = [("Santiago", ["SG"]), ("Alex", ["AZ"]), ("Ambos", ["SG", "AZ"])]
+        kpi_rows = [("Ambos", ["SG", "AZ"])]
 
     for row_label, row_persons in kpi_rows:
         bdf_kpi  = (budgets_df[budgets_df["category_name"].isin(kpi_filter)]
