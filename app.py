@@ -1284,6 +1284,7 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                                             ni_notes.strip() or None)
                         _clear_cache()
                         st.session_state["balloons_ingresos"] = True
+                        st.rerun(scope="fragment")
 
         if extras_df.empty:
             st.caption("Sin ingresos adicionales este mes.")
