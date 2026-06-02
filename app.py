@@ -617,23 +617,10 @@ with tab_dash:
 
     # ── Progress bars (Plotly) ────────────────────────────────────────────────
     if not budgets_df.empty:
-        ph1, ph2, ph3 = st.columns([2, 2, 3])
-        ph1.markdown('<div class="sec-head">Progreso de Presupuesto</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sec-head">Progreso de Presupuesto</div>', unsafe_allow_html=True)
 
-        # Category group filter
-        CAT_GROUPS = {
-            "Todas": None,
-            "Diversión": ["Salidas a comer", "Bares", "Café", "Cultura", "Miscellaneous"],
-            "Ahorro":    ["Ahorro para España", "Ahorro de emergencia", "Ahorro para viajes"],
-            "Hogar":     ["Arriendo", "Gastos comunes", "Luz", "Agua", "Gas", "Internet", "Higiene hogar"],
-        }
-        prog_group = ph2.selectbox("Grupo", list(CAT_GROUPS.keys()),
-                                   label_visibility="collapsed", key="prog_group")
-        prog_filter = CAT_GROUPS[prog_group]
-
-        # Apply category filter to budgets_df for chart
-        bdf_filtered = (budgets_df[budgets_df["category_name"].isin(prog_filter)]
-                        if prog_filter else budgets_df)
+        bdf_filtered = (budgets_df[budgets_df["category_name"].isin(kpi_filter)]
+                        if kpi_filter else budgets_df)
 
         if len(persons_dash) == 2:
             c_sg, c_az = st.columns(2)
