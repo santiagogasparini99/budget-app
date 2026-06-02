@@ -1269,8 +1269,8 @@ def _ingresos_panel(M: int, Y: int, sel_month_name: str, sel_year: int):
                 ni1, ni2  = st.columns(2)
                 ni_person = ni1.selectbox("Persona", db.PERSONS,
                                           format_func=lambda x: f"{x} · {db.PERSON_NAMES[x]}")
-                ni_amount = ni2.number_input("Monto ($)", min_value=50,
-                                             value=None, step=50, format="%d")
+                ni_amount = ni2.number_input("Monto ($)", min_value=1,
+                                             value=None, step=1, format="%d")
                 ni_date   = st.date_input("Fecha", value=date.today())
                 ni_notes  = st.text_input("Notas (opcional)", placeholder="")
                 if st.form_submit_button("➕ Agregar", use_container_width=True, type="primary"):
