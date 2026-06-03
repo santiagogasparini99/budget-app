@@ -1895,14 +1895,27 @@ with tab_sg:
     with st.expander("✏️ Actualizar saldos (bancos y tarjetas)"):
         with st.form("sg_update_balances"):
             upd_vals = {}
-            upd_cols = st.columns(2)
-            for i, (_, row) in enumerate(sg_accs.iterrows()):
-                icon = "🏦" if row["account_type"] == "bank" else "💳"
-                upd_vals[int(row["id"])] = upd_cols[i % 2].number_input(
-                    f"{icon} {row['account_name']}",
-                    value=float(row["balance"]),
-                    step=1.0, format="%.0f",
-                    key=f"upd_acc_{row['id']}",
+            # Row 1: bancos
+            _bank_rows = banks.reset_index(drop=True)
+            _bank_cols = st.columns(len(_bank_rows)) if not _bank_rows.empty else []
+            _named_banks = {"Banco de Chile": 0, "Santander": 1}
+            _bank_sorted = sorted(_bank_rows.iterrows(),
+                                  key=lambda x: _named_banks.get(x[1]["account_name"], 99))
+            for col, (_, row) in zip(_bank_cols, _bank_sorted):
+                upd_vals[int(row["id"])] = col.number_input(
+                    f"🏦 {row['account_name']}", value=float(row["balance"]),
+                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
+                )
+            # Row 2: tarjetas (CMR izq, Tarjeta Santander der)
+            _cc_rows = credits.reset_index(drop=True)
+            _cc_cols = st.columns(len(_cc_rows)) if not _cc_rows.empty else []
+            _named_cc = {"CMR": 0, "Tarjeta Santander": 1}
+            _cc_sorted = sorted(_cc_rows.iterrows(),
+                                key=lambda x: _named_cc.get(x[1]["account_name"], 99))
+            for col, (_, row) in zip(_cc_cols, _cc_sorted):
+                upd_vals[int(row["id"])] = col.number_input(
+                    f"💳 {row['account_name']}", value=float(row["balance"]),
+                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
                 )
             if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
                 for acc_id, val in upd_vals.items():
