@@ -68,30 +68,33 @@ def _clear_cache():
 db.init_sg_tables()
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _sg_accounts():       return db.get_sg_accounts()
+def _sg_accounts():                  return db.get_sg_accounts()
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _sg_accounts_month(m, y):        return db.get_sg_accounts_for_month(m, y)
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _sg_debts():          return db.get_sg_personal_debts(only_pending=True)
 
 def _clear_sg_cache():
-    _sg_accounts.clear(); _sg_debts.clear()
+    _sg_accounts.clear(); _sg_debts.clear(); _sg_accounts_month.clear()
 
-def _apply_payment(account_id: int, expense_amount: float) -> float:
-    """Subtract expense from bank or add to CC debt. Returns signed delta applied."""
-    acc = db.get_sg_account(account_id)
+def _apply_payment(account_id: int, expense_amount: float, month: int, year: int) -> float:
+    """Subtract expense from bank or add to CC debt for given month. Returns signed delta."""
+    acc = db.get_sg_account_for_month(account_id, month, year)
     if not acc:
         return 0.0
     delta = -expense_amount if acc["account_type"] == "bank" else +expense_amount
-    db.update_sg_account_balance(account_id, float(acc["balance"]) + delta)
+    db.update_sg_account_balance_for_month(account_id, float(acc["balance"]) + delta, month, year)
     _clear_sg_cache()
     return delta
 
-def _reverse_payment(account_id: int, applied_amount: float):
-    """Undo a previous payment application."""
-    acc = db.get_sg_account(account_id)
+def _reverse_payment(account_id: int, applied_amount: float, month: int, year: int):
+    """Undo a previous payment application for given month."""
+    acc = db.get_sg_account_for_month(account_id, month, year)
     if not acc:
         return
-    db.update_sg_account_balance(account_id, float(acc["balance"]) - applied_amount)
+    db.update_sg_account_balance_for_month(account_id, float(acc["balance"]) - applied_amount, month, year)
     _clear_sg_cache()
 
 st.set_page_config(
@@ -189,7 +192,7 @@ with st.sidebar:
     st.divider()
 
     now   = datetime.now()
-    years = list(range(now.year - 1, now.year + 2))
+    years = list(range(2024, 2031))
     month_names = list(db.MONTHS_ES.values())
     months_inv  = {v: k for k, v in db.MONTHS_ES.items()}
 
@@ -352,7 +355,7 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
             by = Y if bm is not None else None
             applied_amount = None
             if payment_source_id:
-                applied_amount = _apply_payment(payment_source_id, float(amount))
+                applied_amount = _apply_payment(payment_source_id, float(amount), M, Y)
             new_exp_id = db.add_expense(
                 description.strip(), cat_name_to_id[cat_name], payer, float(amount),
                 split_type, expense_date.isoformat(), notes.strip() or None,
@@ -538,10 +541,10 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                         # Reverse old payment, apply new
                         _old_paid = row.get("payment_applied_amount")
                         if _old_psid_val != "none" and _old_paid and not pd.isna(_old_paid):
-                            _reverse_payment(int(_old_psid_val), float(_old_paid))
+                            _reverse_payment(int(_old_psid_val), float(_old_paid), M, Y)
                         e_applied = None
                         if e_payment_source_id:
-                            e_applied = _apply_payment(e_payment_source_id, float(e_amount))
+                            e_applied = _apply_payment(e_payment_source_id, float(e_amount), M, Y)
 
                         final_split_pct = float(e_split_pct) if e_split_type == "custom" else None
                         db.update_expense(
@@ -640,7 +643,7 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                     _psid = row.get("payment_source_id")
                     _paid = row.get("payment_applied_amount")
                     if _psid and not pd.isna(_psid) and _paid and not pd.isna(_paid):
-                        _reverse_payment(int(_psid), float(_paid))
+                        _reverse_payment(int(_psid), float(_paid), M, Y)
                     db.delete_expense(row_id)
                     _clear_cache(); st.rerun()
 
@@ -1742,13 +1745,10 @@ with tab_sg:
     _sg_prev = st.session_state.get(_sg_month_key)
     _sg_curr = (M, Y)
     if _sg_prev is not None and _sg_prev != _sg_curr:
-        for _, _acc in _sg_accounts().iterrows():
-            db.update_sg_account_balance(int(_acc["id"]), 0.0)
-        _clear_sg_cache()
-        st.info(f"📅 Nuevo mes: **{sel_month_name} {Y}** — saldos reiniciados a $0.")
+        st.info(f"📅 **{sel_month_name} {Y}** — saldos del mes cargados.")
     st.session_state[_sg_month_key] = _sg_curr
 
-    sg_accs  = _sg_accounts()
+    sg_accs  = _sg_accounts_month(M, Y)   # balances per month
     sg_debts = _sg_debts()
 
     banks   = sg_accs[sg_accs["account_type"] == "bank"]
@@ -1924,7 +1924,7 @@ with tab_sg:
                 )
             if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
                 for acc_id, val in upd_vals.items():
-                    db.update_sg_account_balance(acc_id, val)
+                    db.update_sg_account_balance_for_month(acc_id, val, M, Y)
                 _clear_sg_cache(); st.rerun()
 
     # 2. Agregar nueva deuda

@@ -944,20 +944,67 @@ def init_sg_tables():
         # Add payment columns to expenses if not present
         _run(conn, "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_source_id INTEGER REFERENCES sg_accounts(id)")
         _run(conn, "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_applied_amount DECIMAL(12,2)")
+        # Monthly balance snapshots per account
+        _run(conn, """
+            CREATE TABLE IF NOT EXISTS sg_account_monthly (
+                account_id INTEGER REFERENCES sg_accounts(id),
+                month      INTEGER NOT NULL,
+                year       INTEGER NOT NULL,
+                balance    DECIMAL(12,2) NOT NULL DEFAULT 0,
+                updated_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (account_id, month, year)
+            )
+        """)
 
 def get_sg_accounts() -> pd.DataFrame:
     with get_conn() as conn:
         return _df(conn, "SELECT * FROM sg_accounts ORDER BY account_type DESC, account_name")
+
+def get_sg_accounts_for_month(month: int, year: int) -> pd.DataFrame:
+    """Returns sg_accounts with balance from the monthly snapshot (0 if not set yet)."""
+    with get_conn() as conn:
+        return _df(conn, """
+            SELECT a.id, a.account_name, a.account_type,
+                   COALESCE(m.balance, 0) AS balance,
+                   m.updated_at
+            FROM sg_accounts a
+            LEFT JOIN sg_account_monthly m
+                   ON m.account_id = a.id AND m.month = %s AND m.year = %s
+            ORDER BY a.account_type DESC, a.account_name
+        """, (month, year))
 
 def get_sg_account(account_id: int) -> dict:
     with get_conn() as conn:
         df = _df(conn, "SELECT * FROM sg_accounts WHERE id=%s", (account_id,))
         return df.iloc[0].to_dict() if not df.empty else {}
 
+def get_sg_account_for_month(account_id: int, month: int, year: int) -> dict:
+    with get_conn() as conn:
+        df = _df(conn, """
+            SELECT a.id, a.account_name, a.account_type,
+                   COALESCE(m.balance, 0) AS balance
+            FROM sg_accounts a
+            LEFT JOIN sg_account_monthly m
+                   ON m.account_id = a.id AND m.month = %s AND m.year = %s
+            WHERE a.id = %s
+        """, (month, year, account_id))
+        return df.iloc[0].to_dict() if not df.empty else {}
+
 def update_sg_account_balance(account_id: int, balance: float):
+    """Legacy: updates the base sg_accounts table (used by payment source logic)."""
     with get_conn() as conn:
         _run(conn, "UPDATE sg_accounts SET balance=%s, updated_at=NOW() WHERE id=%s",
              (balance, account_id))
+
+def update_sg_account_balance_for_month(account_id: int, balance: float,
+                                         month: int, year: int):
+    with get_conn() as conn:
+        _run(conn, """
+            INSERT INTO sg_account_monthly (account_id, month, year, balance, updated_at)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (account_id, month, year)
+            DO UPDATE SET balance = EXCLUDED.balance, updated_at = NOW()
+        """, (account_id, month, year, balance))
 
 def get_sg_personal_debts(only_pending: bool = True) -> pd.DataFrame:
     with get_conn() as conn:
