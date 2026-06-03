@@ -1267,8 +1267,14 @@ def _deudas_panel(M: int, Y: int):
                 tl         = db.SPLIT_TYPES[row["split_type"]]
                 debt_amt   = float(row["amount"]) * db._other_pct(row)
                 reconciled = (row.get("is_reconciled") or 0) == 1
-                fade       = "opacity:0.4;" if reconciled else ""
-                tag        = " · <b style='color:#38a169'>Acumulada</b>" if reconciled else " · <b style='color:#e53e3e'>Período</b>"
+                settled    = (row.get("is_settled") or 0) == 1
+                fade       = "opacity:0.4;" if (reconciled or settled) else ""
+                if reconciled:
+                    tag = " · <b style='color:#38a169'>Acumulada</b>"
+                elif settled:
+                    tag = " · <b style='color:#718096'>Saldada</b>"
+                else:
+                    tag = " · <b style='color:#e53e3e'>Período</b>"
                 c1, c2, c3 = st.columns([2.5, 1.6, 2.0])
                 c1.markdown(
                     f"<div style='{fade}'>"
@@ -1284,20 +1290,25 @@ def _deudas_panel(M: int, Y: int):
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-                c3, c4 = st.columns(2) if not reconciled else (c3, None)
                 if reconciled:
                     if c3.button("↩ Period.", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
                         _clear_cache(); st.rerun(scope="fragment")
+                elif settled:
+                    if c3.button("↩ Reabrir", key=f"unsettle_{row['id']}", help="Marcar como pendiente", use_container_width=True):
+                        db.mark_expense_settled(int(row["id"]), settled=False)
+                        _clear_cache(); st.rerun(scope="fragment")
                 else:
-                    debtor  = "AZ" if row["payer"] == "SG" else "SG"
+                    debtor   = "AZ" if row["payer"] == "SG" else "SG"
                     creditor = row["payer"]
-                    if c3.button("✅", key=f"settle_{row['id']}", help="Marcar como saldado", use_container_width=True):
+                    c3a, c3b = st.columns(2)
+                    if c3a.button("✅", key=f"settle_{row['id']}", help="Marcar como saldada", use_container_width=True):
                         db.add_settlement(debtor, creditor, debt_amt,
                                           f"Saldado: {row['description']}", date.today().isoformat(),
                                           debt_type="period")
+                        db.mark_expense_settled(int(row["id"]), settled=True)
                         _clear_cache(); st.rerun(scope="fragment")
-                    if c4.button("📦", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
+                    if c3b.button("📦", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
                         _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)

@@ -229,6 +229,7 @@ def init_db():
             _run(conn, f"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS {col} {definition}")
         _run(conn, "ALTER TABLE settlements ADD COLUMN IF NOT EXISTS debt_type TEXT DEFAULT 'period'")
         _run(conn, "ALTER TABLE savings ADD COLUMN IF NOT EXISTS expense_id INTEGER")
+        _run(conn, "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS is_settled INTEGER DEFAULT 0")
 
         for old, new in [
             ("Emergency Savings", "Ahorro de emergencia"),
@@ -364,7 +365,7 @@ def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
         query = """
             SELECT e.id, e.description, e.payer, e.amount, e.split_type,
                    e.date, e.budget_month, e.budget_year, e.notes, e.created_at,
-                   e.is_reconciled, e.split_pct,
+                   e.is_reconciled, e.is_settled, e.split_pct,
                    e.payment_source_id, e.payment_applied_amount,
                    c.id as category_id, c.name as category_name, c.color
             FROM expenses e
@@ -424,6 +425,11 @@ def delete_expense(expense_id: int):
         _run(conn, "DELETE FROM savings  WHERE expense_id=%s", (expense_id,))
         _run(conn, "DELETE FROM expenses WHERE id=%s",         (expense_id,))
 
+
+def mark_expense_settled(expense_id: int, settled: bool = True):
+    with get_conn() as conn:
+        _run(conn, "UPDATE expenses SET is_settled=%s WHERE id=%s",
+             (1 if settled else 0, expense_id))
 
 def reconcile_expense(expense_id: int, reconciled: bool = True):
     with get_conn() as conn:
