@@ -1850,13 +1850,11 @@ with tab_sg:
             unsafe_allow_html=True,
         )
         components.html(
-            """<button onclick="
-              var tabs = window.parent.document.querySelectorAll('button[role=\\"tab\\"]');
-              if (tabs.length > 2) tabs[2].click();
-            " style="width:100%;margin-top:4px;background:#252d42;color:#8a94b0;border:1px solid #3a4460;
-                     border-radius:6px;padding:4px 8px;font-size:0.78em;cursor:pointer;">
-              🤝 Ver Deudas →
-            </button>""",
+            "<button onclick=\"var t=window.parent.document.querySelectorAll('button[role=tab]');"
+            "if(t.length>2)t[2].click();\" "
+            "style=\"width:100%;margin-top:4px;background:#252d42;color:#8a94b0;"
+            "border:1px solid #3a4460;border-radius:6px;padding:4px 8px;"
+            "font-size:0.78em;cursor:pointer;\">🤝 Ver Deudas &rarr;</button>",
             height=36,
         )
     debt_summary_cols[1].markdown(
