@@ -1332,11 +1332,11 @@ def _deudas_panel(M: int, Y: int):
                 if reconciled:
                     if c3.button("↩ Period.", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
-                        _clear_cache(); st.rerun(scope="fragment")
+                        _clear_cache(); st.rerun()
                 else:
                     if c3.button("Acum. →", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
-                        _clear_cache(); st.rerun(scope="fragment")
+                        _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
     with col_manual:
@@ -1363,7 +1363,7 @@ def _deudas_panel(M: int, Y: int):
                         db.add_manual_debt(md_debtor, md_creditor_val, float(md_amount),
                                            md_desc.strip(), md_date.isoformat())
                         st.success("✅ Deuda registrada!")
-                        _clear_cache(); st.rerun(scope="fragment")
+                        _clear_cache(); st.rerun()
 
         if manual_df.empty:
             st.caption("Sin deudas manuales pendientes.")
@@ -1381,11 +1381,11 @@ def _deudas_panel(M: int, Y: int):
                 if c3.button("✅", key=f"settle_md_{row['id']}", help="Marcar como saldada",
                             use_container_width=True):
                     db.settle_manual_debt(int(row["id"]))
-                    _clear_cache(); st.rerun(scope="fragment")
+                    _clear_cache(); st.rerun()
                 if c4.button("🗑", key=f"del_md_{row['id']}", help="Eliminar",
                              use_container_width=True):
                     db.delete_manual_debt(int(row["id"]))
-                    _clear_cache(); st.rerun(scope="fragment")
+                    _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
     with col_pay:
@@ -1412,7 +1412,7 @@ def _deudas_panel(M: int, Y: int):
                 dt = "period" if s_debt_type == "Deuda del período" else "accumulated"
                 db.add_settlement(s_from, s_to_val, float(s_amount), s_desc, s_date.isoformat(), debt_type=dt)
                 st.success("✅ Pago registrado!")
-                _clear_cache(); st.rerun(scope="fragment")
+                _clear_cache(); st.rerun()
 
         st.markdown("")
         st.markdown('<div class="sec-head">Historial de Pagos</div>', unsafe_allow_html=True)
@@ -1432,7 +1432,7 @@ def _deudas_panel(M: int, Y: int):
                             unsafe_allow_html=True)
                 if c3.button("🗑", key=f"del_s_{row['id']}", use_container_width=True):
                     db.delete_settlement(int(row["id"]))
-                    _clear_cache(); st.rerun(scope="fragment")
+                    _clear_cache(); st.rerun()
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
 
 
