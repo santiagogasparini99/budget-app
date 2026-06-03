@@ -1729,7 +1729,7 @@ with tab_sg:
                 upd_vals[int(row["id"])] = upd_cols[i % 2].number_input(
                     f"{icon} {row['account_name']}",
                     value=float(row["balance"]),
-                    step=1000.0, format="%.0f",
+                    step=1.0, format="%.0f",
                     key=f"upd_acc_{row['id']}",
                 )
             if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
