@@ -449,30 +449,44 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             by_val  = row.get("budget_year")
             if bm_val is not None and not (isinstance(bm_val, float) and pd.isna(bm_val)):
                 bm_label = db.MONTHS_ES.get(int(bm_val), "?")
-                bm_info  = f" &nbsp;📅 <span style='color:#3182ce'>{bm_label} {int(by_val)}</span>"
+                bm_info  = f"&nbsp;·&nbsp;📅 <span style='color:#3182ce'>{bm_label} {int(by_val)}</span>"
 
             _nv = row.get("notes")
-            notes_part = f" · {_nv}" if _nv and isinstance(_nv, str) and _nv.strip() else ""
+            notes_part = f"&nbsp;·&nbsp;<span style='color:#6b7fa3;font-style:italic'>{_nv}</span>" if _nv and isinstance(_nv, str) and _nv.strip() else ""
+
+            try:
+                fmt_date = pd.to_datetime(row["date"]).strftime("%d %b")
+            except Exception:
+                fmt_date = str(row["date"])[:10]
+
+            cat_color = row.get("color") or "#667eea"
 
             c_info, c_tag, c_who, c_amt, c_btns = st.columns([4, 2, 0.8, 1.2, 0.85])
             c_info.markdown(
-                f"<div style='line-height:1.3'>"
-                f"<strong>{row['description']}</strong><br>"
-                f"<span style='color:#666;font-size:0.78em'>{row['category_name']} · {row['date']}{bm_info}{notes_part}</span>"
+                f"<div style='line-height:1.5'>"
+                f"<span style='color:#e2e8f0;font-weight:600'>{row['description']}</span><br>"
+                f"<span style='color:{cat_color};font-size:0.7em'>●</span>"
+                f"<span style='color:#8a94b0;font-size:0.78em'>&nbsp;{row['category_name']}"
+                f"&nbsp;·&nbsp;{fmt_date}{bm_info}{notes_part}</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
             c_tag.markdown(
-                f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
+                f"<span class='badge' style='background:{tc}20;color:{tc};border:1px solid {tc}40'>{tl}</span>",
                 unsafe_allow_html=True,
             )
             _pc = {"SG": "#4a9eff", "AZ": "#ff8c42"}
             c_who.markdown(
-                f"<span style='color:{_pc.get(row['payer'], '#fff')};font-weight:600'>"
+                f"<span style='color:{_pc.get(row[\"payer\"], \"#fff\")};font-weight:600'>"
                 f"{row['payer']}</span>",
                 unsafe_allow_html=True,
             )
-            c_amt.markdown(f"**&#36;{row['amount']:,.0f}**")
+            c_amt.markdown(
+                f"<span style='color:#e2e8f0;font-weight:700'>&#36;{row['amount']:,.0f}</span>",
+                unsafe_allow_html=True,
+            )
+            st.markdown("<hr style='border:0;border-top:1px solid #1e2535;margin:2px 0 6px 0'>",
+                        unsafe_allow_html=True)
             with c_btns:
                 b1, b2 = st.columns(2)
                 if b1.button("✏️", key=f"edit_e_{row_id}", help="Editar",
