@@ -790,6 +790,15 @@ with tab_dash:
                     dtick="D1",           # one tick per day
                 )
                 fig_daily.update_yaxes(gridcolor="#f0f0f0")
+                fig_daily.update_traces(
+                    hovertemplate=(
+                        "<b>%{fullData.name}</b><br>"
+                        "<span style='color:#6b7fa3'>──────────────────</span><br>"
+                        "<span style='color:#8a94b0'>%{x|%d %b}</span><br>"
+                        "<b style='color:#7eb8f7'>$%{y:,.2f}</b>"
+                        "<extra></extra>"
+                    )
+                )
                 st.plotly_chart(fig_daily, use_container_width=True, config={"displayModeBar": False})
 
         with c_right:
@@ -814,7 +823,13 @@ with tab_dash:
                     )
                     fig_pie.update_traces(
                         textposition="inside", textinfo="percent",
-                        hovertemplate="<b>%{label}</b><br>$%{value:,.2f}<br>%{percent}<extra></extra>",
+                        hovertemplate=(
+                            "<b>%{label}</b><br>"
+                            "<span style='color:#6b7fa3'>──────────────────</span><br>"
+                            "<b style='color:#7eb8f7'>$%{value:,.2f}</b>"
+                            "  <span style='color:#8a94b0'>(%{percent})</span>"
+                            "<extra></extra>"
+                        ),
                     )
                     st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
     else:
