@@ -1613,7 +1613,7 @@ with tab_sg:
     # ── Resumen financiero ────────────────────────────────────────────────────
     total_banks      = float(banks["balance"].sum())
     total_cc         = float(credits["balance"].sum())
-    alexis_balance   = _period_balance(M, Y) + _accum_balance()
+    alexis_balance   = _period_balance(M, Y)
     alexis_owes_me   = max(0.0, alexis_balance)
     third_party_total = float(sg_debts["amount"].sum()) if not sg_debts.empty else 0.0
     net_position     = total_banks - total_cc + alexis_owes_me + third_party_total
@@ -1747,7 +1747,7 @@ with tab_sg:
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
         f"<div style='color:#ff8c42;font-size:0.85em;font-weight:600;margin-bottom:6px'>Alex</div>"
         f"<div style='color:{'#56d17e' if alexis_owes_me > 0 else '#4a5568'};font-size:1.7em;font-weight:700'>${alexis_owes_me:,.0f}</div>"
-        f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>deuda total</div>"
+        f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>deuda del período</div>"
         f"</div>",
         unsafe_allow_html=True,
     )
