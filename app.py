@@ -1610,6 +1610,62 @@ with tab_sg:
     banks   = sg_accs[sg_accs["account_type"] == "bank"]
     credits = sg_accs[sg_accs["account_type"] == "credit"]
 
+    # ── Resumen financiero ────────────────────────────────────────────────────
+    total_banks  = float(banks["balance"].sum())
+    total_cc     = float(credits["balance"].sum())
+    net_position = total_banks - total_cc
+
+    income_data  = _monthly_income(M, Y)
+    income_extra = _income_entries(M, Y)
+    sg_salary    = income_data.get("SG", 0.0)
+    sg_extras    = float(income_extra[income_extra["person"] == "SG"]["amount"].sum()) if not income_extra.empty else 0.0
+    sg_income    = sg_salary + sg_extras
+
+    _sp = _spending(M, Y)
+    sg_spent = float(_sp[_sp["person"] == "SG"]["spent"].sum()) if not _sp.empty else 0.0
+
+    sg_expected  = sg_income - sg_spent   # lo que deberías tener según ingresos - gastos
+    deviation    = net_position - sg_expected
+    dev_pct      = (deviation / sg_expected * 100) if sg_expected > 0 else 0.0
+
+    if dev_pct > 15:
+        dev_color, dev_label, dev_icon = "#56d17e", "Muy por arriba del presupuesto", "🟢"
+    elif dev_pct >= -10:
+        dev_color, dev_label, dev_icon = "#4a9eff", "Cerca del presupuesto", "🔵"
+    elif dev_pct >= -30:
+        dev_color, dev_label, dev_icon = "#f6ad55", "Por debajo del presupuesto", "⚠️"
+    else:
+        dev_color, dev_label, dev_icon = "#ff6b6b", "Alerta: muy por debajo", "🚨"
+
+    dev_sign = "+" if deviation >= 0 else ""
+    st.markdown(
+        f"<div style='background:#1a2035;border-radius:14px;padding:22px 24px;margin-bottom:20px'>"
+        f"<div style='display:flex;justify-content:space-between;align-items:flex-start'>"
+        f"  <div>"
+        f"    <div style='color:#8a94b0;font-size:0.8em;margin-bottom:4px'>Posición neta (bancos − tarjetas)</div>"
+        f"    <div style='color:#e2e8f0;font-size:2.2em;font-weight:700'>${net_position:,.0f}</div>"
+        f"  </div>"
+        f"  <div style='text-align:right'>"
+        f"    <div style='color:#8a94b0;font-size:0.8em;margin-bottom:4px'>Desviación vs presupuesto</div>"
+        f"    <div style='color:{dev_color};font-size:2.2em;font-weight:700'>{dev_sign}${deviation:,.0f}</div>"
+        f"  </div>"
+        f"</div>"
+        f"<div style='margin-top:14px;padding-top:14px;border-top:1px solid #252d42;"
+        f"display:flex;justify-content:space-between;align-items:center'>"
+        f"  <div style='color:#6b7fa3;font-size:0.82em'>"
+        f"    Ingresos SG: <b style='color:#c8d0e7'>${sg_income:,.0f}</b>"
+        f"    &nbsp;·&nbsp; Gastado: <b style='color:#c8d0e7'>${sg_spent:,.0f}</b>"
+        f"    &nbsp;·&nbsp; Esperado: <b style='color:#c8d0e7'>${sg_expected:,.0f}</b>"
+        f"  </div>"
+        f"  <div style='background:{dev_color}22;color:{dev_color};border:1px solid {dev_color}55;"
+        f"border-radius:20px;padding:4px 14px;font-size:0.82em;font-weight:600'>"
+        f"    {dev_icon} {dev_label} &nbsp;({dev_sign}{dev_pct:.1f}%)"
+        f"  </div>"
+        f"</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
     # ── Cuentas bancarias ─────────────────────────────────────────────────────
     st.markdown('<div class="sec-head">🏦 Cuentas Bancarias</div>', unsafe_allow_html=True)
 
