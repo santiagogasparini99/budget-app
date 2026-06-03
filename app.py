@@ -255,6 +255,26 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
         split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
                               key=f"nexp_pct_{fk}",
                               help="Ej: 30 → el otro paga el 30%, vos el 70%")
+        if amount:
+            _other_amt = float(amount) * split_pct / 100
+            _my_amt    = float(amount) * (1 - split_pct / 100)
+            _other_name = db.PERSON_NAMES["AZ" if payer == "SG" else "SG"]
+            _my_name    = db.PERSON_NAMES[payer]
+            sc1, sc2 = st.columns(2)
+            sc1.markdown(
+                f"<div style='background:#1a2035;border-radius:8px;padding:8px 12px;text-align:center'>"
+                f"<div style='color:#8a94b0;font-size:0.75em'>{_my_name} paga</div>"
+                f"<div style='color:#4a9eff;font-size:1.2em;font-weight:700'>${_my_amt:,.0f}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            sc2.markdown(
+                f"<div style='background:#1a2035;border-radius:8px;padding:8px 12px;text-align:center'>"
+                f"<div style='color:#8a94b0;font-size:0.75em'>{_other_name} paga</div>"
+                f"<div style='color:#ff8c42;font-size:1.2em;font-weight:700'>${_other_amt:,.0f}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
     notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…",
                          key=f"nexp_notes_{fk}")
