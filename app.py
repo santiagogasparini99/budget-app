@@ -1801,7 +1801,7 @@ with tab_sg:
     debt_summary_cols[1].markdown(
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
         f"<div style='color:#f6ad55;font-size:0.85em;font-weight:600;margin-bottom:6px'>Otros</div>"
-        f"<div style='color:{'#56d17e' if third_party_total > 0 else '#4a5568'};font-size:1.7em;font-weight:700'>${third_party_total:,.0f}</div>"
+        f"<div style='color:{'#56d17e' if third_party_total > 0 else '#ff6b6b' if third_party_total < 0 else '#4a5568'};font-size:1.7em;font-weight:700'>{'+'if third_party_total>0 else ''}${third_party_total:,.0f}</div>"
         f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>{len(sg_debts)} persona{'s' if len(sg_debts) != 1 else ''}</div>"
         f"</div>",
         unsafe_allow_html=True,
@@ -1809,7 +1809,7 @@ with tab_sg:
     debt_summary_cols[2].markdown(
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
         f"<div style='color:#a78bfa;font-size:0.85em;font-weight:600;margin-bottom:6px'>Total me deben</div>"
-        f"<div style='color:#56d17e;font-size:1.7em;font-weight:700'>${alexis_owes_me + third_party_total:,.0f}</div>"
+        f"<div style='color:{'#56d17e' if alexis_owes_me+third_party_total>=0 else '#ff6b6b'};font-size:1.7em;font-weight:700'>{'+'if alexis_owes_me+third_party_total>0 else ''}${alexis_owes_me+third_party_total:,.0f}</div>"
         f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>&nbsp;</div>"
         f"</div>",
         unsafe_allow_html=True,
@@ -1817,49 +1817,40 @@ with tab_sg:
 
     st.markdown("")
 
-    # Detail cards — only third parties (Alex already shown in summary above)
-    debt_cards = []
-    for _, drow in sg_debts.iterrows():
-        ddate = pd.to_datetime(drow["date"]).strftime("%d %b %Y") if drow["date"] else ""
-        desc  = drow["description"] or ""
-        debt_cards.append({"label": drow["person_name"], "amount": float(drow["amount"]),
-                           "sub": f"{desc} · {ddate}" if desc else ddate,
-                           "color": "#f6ad55", "id": int(drow["id"])})
-
-    if not debt_cards:
-        st.caption("Nadie te debe plata (por ahora).")
-    else:
-        ncols = min(3, len(debt_cards))
-        card_cols = st.columns(ncols)
-        for i, card in enumerate(debt_cards):
-            with card_cols[i % ncols]:
-                st.markdown(
-                    f"<div style='background:#1a2035;border-radius:12px;padding:16px 14px;"
-                    f"margin-bottom:6px;text-align:center'>"
-                    f"<div style='color:{card['color']};font-size:0.85em;font-weight:600;"
-                    f"margin-bottom:4px'>{card['label']}</div>"
-                    f"<div style='color:#56d17e;font-size:1.6em;font-weight:700'>"
-                    f"+${card['amount']:,.0f}</div>"
-                    f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>{card['sub']}</div>"
-                    f"</div>",
+    # Gestión compacta de deudas de terceros
+    with st.expander(f"📋 Gestionar deudas ({len(sg_debts)})"):
+        if sg_debts.empty:
+            st.caption("Sin deudas registradas.")
+        else:
+            for _, drow in sg_debts.iterrows():
+                did   = int(drow["id"])
+                damt  = float(drow["amount"])
+                ddate = pd.to_datetime(drow["date"]).strftime("%d %b %Y") if drow["date"] else ""
+                desc  = drow["description"] or ""
+                amt_color = "#56d17e" if damt >= 0 else "#ff6b6b"
+                amt_sign  = "+" if damt >= 0 else ""
+                gc1, gc2, gc3, gc4 = st.columns([2.5, 1.2, 0.9, 0.7])
+                gc1.markdown(
+                    f"<span style='color:#e2e8f0;font-weight:600'>{drow['person_name']}</span><br>"
+                    f"<span style='color:#6b7fa3;font-size:0.78em'>{desc}{' · ' if desc else ''}{ddate}</span>",
                     unsafe_allow_html=True,
                 )
-                if card["id"] is not None:
-                    b1, b2 = st.columns(2)
-                    if b1.button("✅", key=f"sg_pay_{card['id']}", help="Pagado",
-                                 use_container_width=True):
-                        db.settle_sg_personal_debt(card["id"], date.today().isoformat())
-                        _clear_sg_cache(); st.rerun()
-                    if b2.button("🗑", key=f"sg_del_{card['id']}", help="Eliminar",
-                                 use_container_width=True):
-                        db.delete_sg_personal_debt(card["id"])
-                        _clear_sg_cache(); st.rerun()
+                gc2.markdown(
+                    f"<span style='color:{amt_color};font-weight:700'>{amt_sign}${damt:,.0f}</span>",
+                    unsafe_allow_html=True,
+                )
+                if gc3.button("✅", key=f"sg_pay_{did}", help="Pagado", use_container_width=True):
+                    db.settle_sg_personal_debt(did, date.today().isoformat())
+                    _clear_sg_cache(); st.rerun()
+                if gc4.button("🗑", key=f"sg_del_{did}", help="Eliminar", use_container_width=True):
+                    db.delete_sg_personal_debt(did)
+                    _clear_sg_cache(); st.rerun()
+                st.markdown("<hr style='border:0;border-top:1px solid #1e2535;margin:3px 0'>",
+                            unsafe_allow_html=True)
 
-    st.markdown("")
-
-    # Actualizar montos de terceros (no Alex)
-    if not sg_debts.empty:
-        with st.expander("✏️ Actualizar montos"):
+        st.markdown("")
+        st.markdown("**Actualizar monto**")
+        if not sg_debts.empty:
             with st.form("sg_update_debts"):
                 upd_debt_vals = {}
                 ud_cols = st.columns(2)
@@ -1870,7 +1861,7 @@ with tab_sg:
                         step=1.0, format="%.0f",
                         key=f"upd_debt_{drow['id']}",
                     )
-                if st.form_submit_button("💾 Guardar montos", type="primary", use_container_width=True):
+                if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
                     for did, val in upd_debt_vals.items():
                         db.update_sg_personal_debt_amount(did, val)
                     _clear_sg_cache(); st.rerun()
@@ -1879,15 +1870,15 @@ with tab_sg:
         with st.form("sg_new_debt", clear_on_submit=True):
             nd1, nd2 = st.columns(2)
             nd_person = nd1.text_input("Persona", placeholder="Ej: Juan")
-            nd_amount = nd2.number_input("Monto ($)", min_value=0.01, value=None,
-                                         step=1.0, format="%.0f")
+            nd_amount = nd2.number_input("Monto ($)", value=None, step=1.0, format="%.0f",
+                                         help="Negativo si vos le debés a esa persona")
             nd_desc = st.text_input("Descripción (opcional)", placeholder="Ej: Cena, préstamo…")
             nd_date = st.date_input("Fecha", value=date.today())
             if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
                 if not nd_person.strip():
                     st.error("Ingresa el nombre de la persona.")
-                elif not nd_amount or nd_amount <= 0:
-                    st.error("El monto debe ser mayor a $0.")
+                elif nd_amount is None:
+                    st.error("Ingresa un monto.")
                 else:
                     db.add_sg_personal_debt(nd_person.strip(), float(nd_amount),
                                             nd_desc.strip() or None, nd_date.isoformat())
