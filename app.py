@@ -466,7 +466,12 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                 f"<span class='badge' style='background:{tc}18;color:{tc}'>{tl}</span>",
                 unsafe_allow_html=True,
             )
-            c_who.markdown(f"**{row['payer']}**")
+            _pc = {"SG": "#4a9eff", "AZ": "#ff8c42"}
+            c_who.markdown(
+                f"<span style='color:{_pc.get(row['payer'], '#fff')};font-weight:600'>"
+                f"{db.PERSON_NAMES.get(row['payer'], row['payer'])}</span>",
+                unsafe_allow_html=True,
+            )
             c_amt.markdown(f"**&#36;{row['amount']:,.0f}**")
             with c_btns:
                 b1, b2 = st.columns(2)
@@ -526,7 +531,7 @@ def _build_expense_tooltip(person: str, category_name: str,
         for _, exp in expenses_df[expenses_df["category_name"] == category_name].iterrows():
             person_amt = _expense_amount_for_person(exp, person)
             if person_amt > 0:
-                exp_date = pd.to_datetime(exp["date"]).strftime("%b-%d") if exp["date"] else ""
+                exp_date = pd.to_datetime(exp["date"]).strftime("%d %b") if exp["date"] else ""
                 lines.append(
                     f'<span style="color:#6b7fa3">{exp_date}</span>'
                     f'  <span style="color:#c8d0e7">{exp["description"]}</span>'
@@ -724,7 +729,7 @@ with tab_dash:
 
     # Debt chip
     st.markdown("")
-    st.markdown(debt_html(balance, " · este mes"), unsafe_allow_html=True)
+    st.markdown(debt_html(balance, " · total"), unsafe_allow_html=True)
 
     st.divider()
 
