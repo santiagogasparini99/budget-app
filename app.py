@@ -1680,10 +1680,9 @@ with tab_sg:
     # ── Resumen financiero ────────────────────────────────────────────────────
     total_banks      = float(banks["balance"].sum())
     total_cc         = float(credits["balance"].sum())
-    alexis_balance   = _period_balance(M, Y)
-    alexis_owes_me   = max(0.0, alexis_balance)
+    alexis_balance    = _period_balance(M, Y)   # + Alex me debe, - yo le debo a Alex
     third_party_total = float(sg_debts["amount"].sum()) if not sg_debts.empty else 0.0
-    net_position     = total_banks - total_cc + alexis_owes_me + third_party_total
+    net_position      = total_banks - total_cc + alexis_balance + third_party_total
 
     income_data  = _monthly_income(M, Y)
     income_extra = _income_entries(M, Y)
@@ -1789,15 +1788,32 @@ with tab_sg:
     # ── Resumen Me deben ──────────────────────────────────────────────────────
     st.markdown('<div class="sec-head">👥 Me deben</div>', unsafe_allow_html=True)
 
+    _alex_color  = "#56d17e" if alexis_balance > 0 else ("#ff6b6b" if alexis_balance < 0 else "#4a5568")
+    _alex_sign   = "+" if alexis_balance > 0 else ""
+    _alex_label  = "Alex te debe" if alexis_balance > 0 else ("Le debés a Alex" if alexis_balance < 0 else "Sin deuda")
+    _tot         = alexis_balance + third_party_total
+    _tot_color   = "#56d17e" if _tot > 0 else ("#ff6b6b" if _tot < 0 else "#4a5568")
+
     debt_summary_cols = st.columns(3)
-    debt_summary_cols[0].markdown(
-        f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
-        f"<div style='color:#ff8c42;font-size:0.85em;font-weight:600;margin-bottom:6px'>Alex</div>"
-        f"<div style='color:{'#56d17e' if alexis_owes_me > 0 else '#4a5568'};font-size:1.7em;font-weight:700'>${alexis_owes_me:,.0f}</div>"
-        f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>deuda del período</div>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    with debt_summary_cols[0]:
+        st.markdown(
+            f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
+            f"<div style='color:#ff8c42;font-size:0.85em;font-weight:600;margin-bottom:6px'>Alex</div>"
+            f"<div style='color:{_alex_color};font-size:1.7em;font-weight:700'>{_alex_sign}${alexis_balance:,.0f}</div>"
+            f"<div style='color:#6b7fa3;font-size:0.72em;margin-top:6px'>{_alex_label} · período</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        components.html(
+            """<button onclick="
+              var tabs = window.parent.document.querySelectorAll('button[role=\\"tab\\"]');
+              if (tabs.length > 2) tabs[2].click();
+            " style="width:100%;margin-top:4px;background:#252d42;color:#8a94b0;border:1px solid #3a4460;
+                     border-radius:6px;padding:4px 8px;font-size:0.78em;cursor:pointer;">
+              🤝 Ver Deudas →
+            </button>""",
+            height=36,
+        )
     debt_summary_cols[1].markdown(
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
         f"<div style='color:#f6ad55;font-size:0.85em;font-weight:600;margin-bottom:6px'>Otros</div>"
@@ -1809,7 +1825,7 @@ with tab_sg:
     debt_summary_cols[2].markdown(
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
         f"<div style='color:#a78bfa;font-size:0.85em;font-weight:600;margin-bottom:6px'>Total me deben</div>"
-        f"<div style='color:{'#56d17e' if alexis_owes_me+third_party_total>=0 else '#ff6b6b'};font-size:1.7em;font-weight:700'>{'+'if alexis_owes_me+third_party_total>0 else ''}${alexis_owes_me+third_party_total:,.0f}</div>"
+        f"<div style='color:{_tot_color};font-size:1.7em;font-weight:700'>{'+'if _tot>0 else ''}${_tot:,.0f}</div>"
         f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>&nbsp;</div>"
         f"</div>",
         unsafe_allow_html=True,
