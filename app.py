@@ -905,13 +905,17 @@ with tab_dash:
         vals_az.append(bal_az + rate_az * i)
         vals_total.append(bal_total + rate_total * i)
 
-    HOVER_PROJ = (
-        "<b>%{fullData.name}</b><br>"
-        "<span style='color:#6b7fa3'>──────────────────</span><br>"
-        "<span style='color:#8a94b0'>%{x}</span><br>"
-        "<b style='color:#7eb8f7'>$%{y:,.0f}</b>"
-        "<extra></extra>"
-    )
+    def _proj_hover(label: str, color: str, rate: float) -> str:
+        cd_rate = f"+${rate:,.0f}/mes" if rate > 0 else "sin aporte"
+        return (
+            f"<b style='color:{color}'>{label}</b><br>"
+            "<span style='color:#6b7fa3'>──────────────────</span><br>"
+            "<span style='color:#8a94b0'>%{x}</span><br>"
+            f"<span style='color:#8a94b0'>Proyectado</span>  "
+            f"<b style='color:{color}'>$%{{y:,.0f}}</b><br>"
+            f"<span style='color:#6b7fa3'>{cd_rate}</span>"
+            "<extra></extra>"
+        )
 
     fig_proj = go.Figure()
     fig_proj.add_trace(go.Scatter(
@@ -921,7 +925,7 @@ with tab_dash:
         line=dict(color="#4a9eff", width=2.5),
         marker=dict(size=6, symbol="circle"),
         fill="tozeroy", fillcolor="rgba(74,158,255,0.08)",
-        hovertemplate=HOVER_PROJ,
+        hovertemplate=_proj_hover("💙 Santiago", "#4a9eff", rate_sg),
     ))
     fig_proj.add_trace(go.Scatter(
         x=proj_months, y=vals_az,
@@ -930,7 +934,7 @@ with tab_dash:
         line=dict(color="#ff8c42", width=2.5),
         marker=dict(size=6, symbol="circle"),
         fill="tozeroy", fillcolor="rgba(255,140,66,0.08)",
-        hovertemplate=HOVER_PROJ,
+        hovertemplate=_proj_hover("🧡 Alex", "#ff8c42", rate_az),
     ))
     fig_proj.add_trace(go.Scatter(
         x=proj_months, y=vals_total,
@@ -938,7 +942,7 @@ with tab_dash:
         mode="lines+markers",
         line=dict(color="#a78bfa", width=2, dash="dot"),
         marker=dict(size=5, symbol="diamond"),
-        hovertemplate=HOVER_PROJ,
+        hovertemplate=_proj_hover("💜 Total", "#a78bfa", rate_total),
     ))
     # "Hoy" marker — first point (add_shape works with categorical x-axis)
     fig_proj.add_shape(
