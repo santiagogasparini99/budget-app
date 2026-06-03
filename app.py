@@ -501,19 +501,50 @@ def debt_html(balance: float, suffix: str = "") -> str:
     return f'<div class="debt-card debt-even">✅ Sin deudas{suffix}</div>'
 
 
-def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.DataFrame) -> go.Figure:
+def _expense_amount_for_person(exp_row, person: str) -> float:
+    """Per-person share of an expense (mirrors database._other_pct logic)."""
+    amt   = float(exp_row["amount"])
+    st    = exp_row["split_type"]
+    payer = exp_row["payer"]
+    if st == "personal":
+        return amt if payer == person else 0.0
+    spct = exp_row.get("split_pct")
+    opct = (0.5 if st == "shared" else
+            1.0 if st == "for_other" else
+            (float(spct) / 100.0 if spct is not None and not pd.isna(spct) else 0.5))
+    return amt * (1 - opct) if payer == person else amt * opct
+
+
+def _build_expense_tooltip(person: str, category_name: str,
+                            expenses_df, remaining: float) -> str:
+    lines = []
+    if expenses_df is not None and not expenses_df.empty:
+        for _, exp in expenses_df[expenses_df["category_name"] == category_name].iterrows():
+            person_amt = _expense_amount_for_person(exp, person)
+            if person_amt > 0:
+                exp_date = str(exp["date"])[:10] if exp["date"] else ""
+                lines.append(f"{exp_date}  {exp['description']}: ${person_amt:,.2f}")
+    if lines:
+        return "<br>".join(lines) + f"<br>━━━━━━━━━━━━<br><b>Restante: ${remaining:,.2f}</b>"
+    return f"<b>Restante: ${remaining:,.2f}</b>"
+
+
+def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.DataFrame,
+                   expenses_df: pd.DataFrame = None) -> go.Figure:
     """Stacked horizontal bars: spent + remaining (+ excess in red)."""
     rows = []
     for person in persons:
         for _, brow in budgets_df[budgets_df[f"budget_{person}"] > 0].iterrows():
-            budget = brow[f"budget_{person}"]
-            sp = spending_df[
+            budget    = brow[f"budget_{person}"]
+            sp        = spending_df[
                 (spending_df["person"] == person) & (spending_df["category_name"] == brow["category_name"])
             ]
-            spent = sp["spent"].sum() if not sp.empty else 0.0
-            pct   = (spent / budget * 100) if budget > 0 else 0
-            name  = db.PERSON_NAMES[person]
-            label = brow["category_name"] if len(persons) == 1 else f"{brow['category_name']}  ·  {name}"
+            spent     = sp["spent"].sum() if not sp.empty else 0.0
+            pct       = (spent / budget * 100) if budget > 0 else 0
+            remaining = max(0.0, budget - spent)
+            name      = db.PERSON_NAMES[person]
+            label     = brow["category_name"] if len(persons) == 1 else f"{brow['category_name']}  ·  {name}"
+            tooltip   = _build_expense_tooltip(person, brow["category_name"], expenses_df, remaining)
             rows.append({
                 "label":   label,
                 "budget":  budget,
@@ -522,6 +553,7 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
                 "total":   spent,
                 "pct":     pct,
                 "color":   "#b03a3a" if spent > budget else ("#38a169" if pct >= 100 else ("#b07a2a" if pct >= 80 else "#4a5bb8")),
+                "tooltip": tooltip,
             })
 
     if not rows:
@@ -529,27 +561,38 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
 
     df = pd.DataFrame(rows).sort_values("total", ascending=True)
 
+    HOVER = (
+        "<b>%{y}</b><br>"
+        "Gastado: $%{customdata[0]:,.2f} / $%{customdata[1]:,.2f}<br>"
+        "%{customdata[2]:.1f}%<br>"
+        "──────────────<br>"
+        "%{customdata[3]}"
+        "<extra></extra>"
+    )
+    cd = list(zip(df["total"], df["budget"], df["pct"], df["tooltip"]))
+
     fig = go.Figure()
     # Spent segment
     fig.add_trace(go.Bar(
         name="Gastado", x=df["spent"], y=df["label"], orientation="h",
         marker=dict(color=df["color"].tolist(), line_width=0),
-        customdata=list(zip(df["total"], df["budget"], df["pct"])),
-        hovertemplate="<b>%{y}</b><br>Gastado: $%{customdata[0]:,.2f} / $%{customdata[1]:,.2f}<br>%{customdata[2]:.1f}%<extra></extra>",
+        customdata=cd,
+        hovertemplate=HOVER,
     ))
     # Remaining segment — carries hover for when spent=0 (zero-width gastado bar is not hoverable)
     fig.add_trace(go.Bar(
         name="Restante", x=(df["budget"] - df["spent"]).clip(lower=0), y=df["label"],
         orientation="h", marker=dict(color="#252d42", line_width=0),
-        customdata=list(zip(df["total"], df["budget"], df["pct"])),
-        hovertemplate="<b>%{y}</b><br>Gastado: $%{customdata[0]:,.2f} / $%{customdata[1]:,.2f}<br>%{customdata[2]:.1f}%<extra></extra>",
+        customdata=cd,
+        hovertemplate=HOVER,
         showlegend=True,
     ))
     # Over-budget segment
     fig.add_trace(go.Bar(
         name="Exceso", x=df["over"], y=df["label"],
         orientation="h", marker=dict(color="#b03a3a", opacity=0.9, line_width=0),
-        hovertemplate="<b>%{y}</b><br>Exceso: $%{x:,.2f}<extra></extra>",
+        customdata=cd,
+        hovertemplate=HOVER,
     ))
 
     chart_h = max(280, len(df) * 26 + 70)
@@ -678,7 +721,7 @@ with tab_dash:
             for person, col in [("SG", c_sg), ("AZ", c_az)]:
                 with col:
                     st.markdown(f"**{db.PERSON_NAMES[person]}**")
-                    fig_prog = progress_chart([person], bdf_filtered, spending_df)
+                    fig_prog = progress_chart([person], bdf_filtered, spending_df, expenses_df)
                     if fig_prog:
                         st.plotly_chart(fig_prog, use_container_width=True, config={"displayModeBar": False})
                     else:
@@ -686,7 +729,7 @@ with tab_dash:
         else:
             person = persons_dash[0]
             st.markdown(f"**{db.PERSON_NAMES[person]}**")
-            fig_prog = progress_chart([person], bdf_filtered, spending_df)
+            fig_prog = progress_chart([person], bdf_filtered, spending_df, expenses_df)
             if fig_prog:
                 st.plotly_chart(fig_prog, use_container_width=True, config={"displayModeBar": False})
             else:
