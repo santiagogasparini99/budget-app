@@ -197,7 +197,7 @@ with st.sidebar:
     except Exception as e:
         st.caption(f"Excel no disponible: {e}")
 
-    st.caption("v1.2 · SG & AZ")
+    st.caption("v2.0 · SG & AZ")
 
 
 # ─── Fragment: formulario nuevo gasto ────────────────────────────────────────
@@ -1611,9 +1611,12 @@ with tab_sg:
     credits = sg_accs[sg_accs["account_type"] == "credit"]
 
     # ── Resumen financiero ────────────────────────────────────────────────────
-    total_banks  = float(banks["balance"].sum())
-    total_cc     = float(credits["balance"].sum())
-    net_position = total_banks - total_cc
+    total_banks      = float(banks["balance"].sum())
+    total_cc         = float(credits["balance"].sum())
+    alexis_balance   = _period_balance(M, Y) + _accum_balance()
+    alexis_owes_me   = max(0.0, alexis_balance)
+    third_party_total = float(sg_debts["amount"].sum()) if not sg_debts.empty else 0.0
+    net_position     = total_banks - total_cc + alexis_owes_me + third_party_total
 
     income_data  = _monthly_income(M, Y)
     income_extra = _income_entries(M, Y)
@@ -1624,9 +1627,11 @@ with tab_sg:
     _sp = _spending(M, Y)
     sg_spent = float(_sp[_sp["person"] == "SG"]["spent"].sum()) if not _sp.empty else 0.0
 
-    sg_expected  = sg_income - sg_spent   # lo que deberías tener según ingresos - gastos
-    deviation    = net_position - sg_expected
-    dev_pct      = (deviation / sg_expected * 100) if sg_expected > 0 else 0.0
+    _bd = _budgets(M, Y)
+    sg_budget     = float(_bd["budget_SG"].sum()) if not _bd.empty else 0.0
+    sg_restante   = sg_budget - sg_spent          # presupuesto − utilizado
+    deviation     = net_position - sg_restante
+    dev_pct       = (deviation / sg_restante * 100) if sg_restante > 0 else 0.0
 
     if dev_pct > 15:
         dev_color, dev_label, dev_icon = "#56d17e", "Muy por arriba del presupuesto", "🟢"
@@ -1642,20 +1647,20 @@ with tab_sg:
         f"<div style='background:#1a2035;border-radius:14px;padding:22px 24px;margin-bottom:20px'>"
         f"<div style='display:flex;justify-content:space-between;align-items:flex-start'>"
         f"  <div>"
-        f"    <div style='color:#8a94b0;font-size:0.8em;margin-bottom:4px'>Posición neta (bancos − tarjetas)</div>"
+        f"    <div style='color:#8a94b0;font-size:0.8em;margin-bottom:4px'>Posición neta (bancos − tarjetas + lo que te deben)</div>"
         f"    <div style='color:#e2e8f0;font-size:2.2em;font-weight:700'>${net_position:,.0f}</div>"
         f"  </div>"
         f"  <div style='text-align:right'>"
-        f"    <div style='color:#8a94b0;font-size:0.8em;margin-bottom:4px'>Desviación vs presupuesto</div>"
+        f"    <div style='color:#8a94b0;font-size:0.8em;margin-bottom:4px'>Desviación vs presupuesto restante</div>"
         f"    <div style='color:{dev_color};font-size:2.2em;font-weight:700'>{dev_sign}${deviation:,.0f}</div>"
         f"  </div>"
         f"</div>"
         f"<div style='margin-top:14px;padding-top:14px;border-top:1px solid #252d42;"
         f"display:flex;justify-content:space-between;align-items:center'>"
         f"  <div style='color:#6b7fa3;font-size:0.82em'>"
-        f"    Ingresos SG: <b style='color:#c8d0e7'>${sg_income:,.0f}</b>"
+        f"    Presupuesto SG: <b style='color:#c8d0e7'>${sg_budget:,.0f}</b>"
         f"    &nbsp;·&nbsp; Gastado: <b style='color:#c8d0e7'>${sg_spent:,.0f}</b>"
-        f"    &nbsp;·&nbsp; Esperado: <b style='color:#c8d0e7'>${sg_expected:,.0f}</b>"
+        f"    &nbsp;·&nbsp; Restante: <b style='color:#c8d0e7'>${sg_restante:,.0f}</b>"
         f"  </div>"
         f"  <div style='background:{dev_color}22;color:{dev_color};border:1px solid {dev_color}55;"
         f"border-radius:20px;padding:4px 14px;font-size:0.82em;font-weight:600'>"
@@ -1734,47 +1739,60 @@ with tab_sg:
 
     st.divider()
 
-    # ── Alexis me debe ────────────────────────────────────────────────────────
-    st.markdown('<div class="sec-head">🤝 Alexis</div>', unsafe_allow_html=True)
-    alexis_balance = _period_balance(M, Y) + _accum_balance()
-    st.markdown(debt_html(alexis_balance, " · total"), unsafe_allow_html=True)
-    st.markdown("")
+    # ── Me deben ──────────────────────────────────────────────────────────────
+    st.markdown('<div class="sec-head">👥 Me deben</div>', unsafe_allow_html=True)
 
-    st.divider()
+    # Build list of all debt cards: Alexis first (if positive), then third parties
+    debt_cards = []
+    if alexis_owes_me > 0:
+        debt_cards.append({
+            "label": "Alex",
+            "amount": alexis_owes_me,
+            "sub": "deuda total con la app",
+            "color": "#ff8c42",
+            "id": None,
+        })
+    for _, drow in sg_debts.iterrows():
+        ddate = pd.to_datetime(drow["date"]).strftime("%d %b %Y") if drow["date"] else ""
+        desc  = drow["description"] or ""
+        sub   = f"{desc} · {ddate}" if desc else ddate
+        debt_cards.append({
+            "label":  drow["person_name"],
+            "amount": float(drow["amount"]),
+            "sub":    sub,
+            "color":  "#f6ad55",
+            "id":     int(drow["id"]),
+        })
 
-    # ── Deudas de terceros ────────────────────────────────────────────────────
-    st.markdown('<div class="sec-head">👥 Me deben · Terceros</div>', unsafe_allow_html=True)
-
-    if sg_debts.empty:
+    if not debt_cards:
         st.caption("Nadie te debe plata (por ahora).")
     else:
-        total_third = float(sg_debts["amount"].sum())
-        st.markdown(
-            f"<div style='color:#56d17e;font-weight:600;margin-bottom:8px'>"
-            f"Total pendiente: ${total_third:,.0f}</div>",
-            unsafe_allow_html=True,
-        )
-        for _, drow in sg_debts.iterrows():
-            did   = int(drow["id"])
-            ddate = pd.to_datetime(drow["date"]).strftime("%d %b %Y") if drow["date"] else "—"
-            dc1, dc2, dc3, dc4 = st.columns([2.5, 1.5, 1, 1])
-            dc1.markdown(
-                f"<span style='color:#e2e8f0;font-weight:600'>{drow['person_name']}</span><br>"
-                f"<span style='color:#8a94b0;font-size:0.8em'>{drow['description'] or ''} &nbsp;·&nbsp; {ddate}</span>",
-                unsafe_allow_html=True,
-            )
-            dc2.markdown(
-                f"<span style='color:#56d17e;font-weight:700'>+${float(drow['amount']):,.0f}</span>",
-                unsafe_allow_html=True,
-            )
-            if dc3.button("✅ Pagado", key=f"sg_pay_{did}", use_container_width=True):
-                db.settle_sg_personal_debt(did, date.today().isoformat())
-                _clear_sg_cache(); st.rerun()
-            if dc4.button("🗑", key=f"sg_del_{did}", help="Eliminar", use_container_width=True):
-                db.delete_sg_personal_debt(did)
-                _clear_sg_cache(); st.rerun()
-            st.markdown("<hr style='border:0;border-top:1px solid #1e2535;margin:4px 0'>",
-                        unsafe_allow_html=True)
+        ncols = min(3, len(debt_cards))
+        card_cols = st.columns(ncols)
+        for i, card in enumerate(debt_cards):
+            with card_cols[i % ncols]:
+                st.markdown(
+                    f"<div style='background:#1a2035;border-radius:12px;padding:16px 14px;"
+                    f"margin-bottom:6px;text-align:center'>"
+                    f"<div style='color:{card['color']};font-size:0.85em;font-weight:600;"
+                    f"margin-bottom:4px'>{card['label']}</div>"
+                    f"<div style='color:#56d17e;font-size:1.6em;font-weight:700'>"
+                    f"+${card['amount']:,.0f}</div>"
+                    f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>"
+                    f"{card['sub']}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                if card["id"] is not None:
+                    b1, b2 = st.columns(2)
+                    if b1.button("✅", key=f"sg_pay_{card['id']}", help="Pagado",
+                                 use_container_width=True):
+                        db.settle_sg_personal_debt(card["id"], date.today().isoformat())
+                        _clear_sg_cache(); st.rerun()
+                    if b2.button("🗑", key=f"sg_del_{card['id']}", help="Eliminar",
+                                 use_container_width=True):
+                        db.delete_sg_personal_debt(card["id"])
+                        _clear_sg_cache(); st.rerun()
 
     st.markdown("")
     with st.expander("➕ Agregar nueva deuda"):
