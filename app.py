@@ -1749,10 +1749,10 @@ with tab_sg:
     # ── Cuentas bancarias ─────────────────────────────────────────────────────
     st.markdown('<div class="sec-head">🏦 Cuentas Bancarias</div>', unsafe_allow_html=True)
 
-    def _account_card(row, color):
+    def _account_card(row, color, force_red=False):
         bal   = float(row["balance"])
         upd   = pd.to_datetime(row["updated_at"]).strftime("%d %b %H:%M") if row["updated_at"] else "—"
-        c_val = "#56d17e" if bal >= 0 else "#ff6b6b"
+        c_val = "#ff6b6b" if force_red else ("#56d17e" if bal >= 0 else "#ff6b6b")
         return (
             f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
             f"<div style='color:{color};font-size:0.85em;font-weight:600;margin-bottom:6px'>{row['account_name']}</div>"
@@ -1781,7 +1781,7 @@ with tab_sg:
 
     cc_cols = st.columns(len(credits) + 1)
     for col, (_, row) in zip(cc_cols, credits.iterrows()):
-        col.markdown(_account_card(row, "#ff4444"), unsafe_allow_html=True)
+        col.markdown(_account_card(row, "#ff4444", force_red=True), unsafe_allow_html=True)
     total_cc = float(credits["balance"].sum())
     cc_cols[-1].markdown(
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
@@ -1825,7 +1825,55 @@ with tab_sg:
 
     st.markdown("")
 
-    # Gestión compacta de deudas de terceros
+    # 1. Actualizar saldos
+    with st.expander("✏️ Actualizar saldos (bancos y tarjetas)"):
+        with st.form("sg_update_balances"):
+            upd_vals = {}
+            _bank_rows = banks.reset_index(drop=True)
+            _bank_cols = st.columns(len(_bank_rows)) if not _bank_rows.empty else []
+            _named_banks = {"Banco de Chile": 0, "Santander": 1}
+            _bank_sorted = sorted(_bank_rows.iterrows(),
+                                  key=lambda x: _named_banks.get(x[1]["account_name"], 99))
+            for col, (_, row) in zip(_bank_cols, _bank_sorted):
+                upd_vals[int(row["id"])] = col.number_input(
+                    f"🏦 {row['account_name']}", value=float(row["balance"]),
+                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
+                )
+            _cc_rows = credits.reset_index(drop=True)
+            _cc_cols = st.columns(len(_cc_rows)) if not _cc_rows.empty else []
+            _named_cc = {"CMR": 0, "Tarjeta Santander": 1}
+            _cc_sorted = sorted(_cc_rows.iterrows(),
+                                key=lambda x: _named_cc.get(x[1]["account_name"], 99))
+            for col, (_, row) in zip(_cc_cols, _cc_sorted):
+                upd_vals[int(row["id"])] = col.number_input(
+                    f"💳 {row['account_name']}", value=float(row["balance"]),
+                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
+                )
+            if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
+                for acc_id, val in upd_vals.items():
+                    db.update_sg_account_balance(acc_id, val)
+                _clear_sg_cache(); st.rerun()
+
+    # 2. Agregar nueva deuda
+    with st.expander("➕ Agregar nueva deuda"):
+        with st.form("sg_new_debt", clear_on_submit=True):
+            nd1, nd2 = st.columns(2)
+            nd_person = nd1.text_input("Persona", placeholder="Ej: Juan")
+            nd_amount = nd2.number_input("Monto ($)", value=None, step=1.0, format="%.0f",
+                                         help="Negativo si vos le debés a esa persona")
+            nd_desc = st.text_input("Descripción (opcional)", placeholder="Ej: Cena, préstamo…")
+            nd_date = st.date_input("Fecha", value=date.today())
+            if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
+                if not nd_person.strip():
+                    st.error("Ingresa el nombre de la persona.")
+                elif nd_amount is None:
+                    st.error("Ingresa un monto.")
+                else:
+                    db.add_sg_personal_debt(nd_person.strip(), float(nd_amount),
+                                            nd_desc.strip() or None, nd_date.isoformat())
+                    _clear_sg_cache(); st.rerun()
+
+    # 3. Gestionar deudas
     with st.expander(f"📋 Gestionar deudas ({len(sg_debts)})"):
         if sg_debts.empty:
             st.caption("Sin deudas registradas.")
@@ -1856,68 +1904,18 @@ with tab_sg:
                 st.markdown("<hr style='border:0;border-top:1px solid #1e2535;margin:3px 0'>",
                             unsafe_allow_html=True)
 
-        st.markdown("")
-        st.markdown("**Actualizar monto**")
         if not sg_debts.empty:
+            st.markdown("")
+            st.markdown("**Actualizar monto**")
             with st.form("sg_update_debts"):
                 upd_debt_vals = {}
                 ud_cols = st.columns(2)
                 for i, (_, drow) in enumerate(sg_debts.iterrows()):
                     upd_debt_vals[int(drow["id"])] = ud_cols[i % 2].number_input(
-                        drow["person_name"],
-                        value=float(drow["amount"]),
-                        step=1.0, format="%.0f",
-                        key=f"upd_debt_{drow['id']}",
+                        drow["person_name"], value=float(drow["amount"]),
+                        step=1.0, format="%.0f", key=f"upd_debt_{drow['id']}",
                     )
                 if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
                     for did, val in upd_debt_vals.items():
                         db.update_sg_personal_debt_amount(did, val)
                     _clear_sg_cache(); st.rerun()
-
-    with st.expander("➕ Agregar nueva deuda"):
-        with st.form("sg_new_debt", clear_on_submit=True):
-            nd1, nd2 = st.columns(2)
-            nd_person = nd1.text_input("Persona", placeholder="Ej: Juan")
-            nd_amount = nd2.number_input("Monto ($)", value=None, step=1.0, format="%.0f",
-                                         help="Negativo si vos le debés a esa persona")
-            nd_desc = st.text_input("Descripción (opcional)", placeholder="Ej: Cena, préstamo…")
-            nd_date = st.date_input("Fecha", value=date.today())
-            if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
-                if not nd_person.strip():
-                    st.error("Ingresa el nombre de la persona.")
-                elif nd_amount is None:
-                    st.error("Ingresa un monto.")
-                else:
-                    db.add_sg_personal_debt(nd_person.strip(), float(nd_amount),
-                                            nd_desc.strip() or None, nd_date.isoformat())
-                    _clear_sg_cache(); st.rerun()
-
-    with st.expander("✏️ Actualizar saldos (bancos y tarjetas)"):
-        with st.form("sg_update_balances"):
-            upd_vals = {}
-            # Row 1: bancos
-            _bank_rows = banks.reset_index(drop=True)
-            _bank_cols = st.columns(len(_bank_rows)) if not _bank_rows.empty else []
-            _named_banks = {"Banco de Chile": 0, "Santander": 1}
-            _bank_sorted = sorted(_bank_rows.iterrows(),
-                                  key=lambda x: _named_banks.get(x[1]["account_name"], 99))
-            for col, (_, row) in zip(_bank_cols, _bank_sorted):
-                upd_vals[int(row["id"])] = col.number_input(
-                    f"🏦 {row['account_name']}", value=float(row["balance"]),
-                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
-                )
-            # Row 2: tarjetas (CMR izq, Tarjeta Santander der)
-            _cc_rows = credits.reset_index(drop=True)
-            _cc_cols = st.columns(len(_cc_rows)) if not _cc_rows.empty else []
-            _named_cc = {"CMR": 0, "Tarjeta Santander": 1}
-            _cc_sorted = sorted(_cc_rows.iterrows(),
-                                key=lambda x: _named_cc.get(x[1]["account_name"], 99))
-            for col, (_, row) in zip(_cc_cols, _cc_sorted):
-                upd_vals[int(row["id"])] = col.number_input(
-                    f"💳 {row['account_name']}", value=float(row["balance"]),
-                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
-                )
-            if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
-                for acc_id, val in upd_vals.items():
-                    db.update_sg_account_balance(acc_id, val)
-                _clear_sg_cache(); st.rerun()
