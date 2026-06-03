@@ -1737,10 +1737,39 @@ with tab_sg:
                     db.update_sg_account_balance(acc_id, val)
                 _clear_sg_cache(); st.rerun()
 
-    st.divider()
+    st.markdown("")
 
-    # ── Me deben ──────────────────────────────────────────────────────────────
+    # ── Resumen Me deben ──────────────────────────────────────────────────────
     st.markdown('<div class="sec-head">👥 Me deben</div>', unsafe_allow_html=True)
+
+    debt_summary_cols = st.columns(3)
+    debt_summary_cols[0].markdown(
+        f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
+        f"<div style='color:#ff8c42;font-size:0.85em;font-weight:600;margin-bottom:6px'>Alex</div>"
+        f"<div style='color:{'#56d17e' if alexis_owes_me > 0 else '#4a5568'};font-size:1.7em;font-weight:700'>${alexis_owes_me:,.0f}</div>"
+        f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>deuda total</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    debt_summary_cols[1].markdown(
+        f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
+        f"<div style='color:#f6ad55;font-size:0.85em;font-weight:600;margin-bottom:6px'>Otros</div>"
+        f"<div style='color:{'#56d17e' if third_party_total > 0 else '#4a5568'};font-size:1.7em;font-weight:700'>${third_party_total:,.0f}</div>"
+        f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>{len(sg_debts)} persona{'s' if len(sg_debts) != 1 else ''}</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+    debt_summary_cols[2].markdown(
+        f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
+        f"<div style='color:#a78bfa;font-size:0.85em;font-weight:600;margin-bottom:6px'>Total me deben</div>"
+        f"<div style='color:#56d17e;font-size:1.7em;font-weight:700'>${alexis_owes_me + third_party_total:,.0f}</div>"
+        f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>&nbsp;</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("")
+    st.markdown('<div class="sec-head" style="font-size:0.85em">Detalle</div>', unsafe_allow_html=True)
 
     # Build list of all debt cards: Alexis first (if positive), then third parties
     debt_cards = []
