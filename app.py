@@ -1781,7 +1781,7 @@ with tab_sg:
 
     cc_cols = st.columns(len(credits) + 1)
     for col, (_, row) in zip(cc_cols, credits.iterrows()):
-        col.markdown(_account_card(row, "#ff8c42"), unsafe_allow_html=True)
+        col.markdown(_account_card(row, "#ff4444"), unsafe_allow_html=True)
     total_cc = float(credits["balance"].sum())
     cc_cols[-1].markdown(
         f"<div style='background:#1a2035;border-radius:12px;padding:18px 16px;text-align:center'>"
