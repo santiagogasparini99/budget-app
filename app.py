@@ -791,10 +791,11 @@ with tab_dash:
 
                 # Build per-(date, person) expense detail for tooltip
                 _exp_copy = expenses_df.copy()
-                _exp_copy["_date"] = pd.to_datetime(_exp_copy["date"]).dt.date
+                _exp_copy["_date_str"] = pd.to_datetime(_exp_copy["date"]).dt.strftime("%Y-%m-%d")
 
                 def _day_detail(row):
-                    day_exps = _exp_copy[_exp_copy["_date"] == pd.to_datetime(row["date"]).date()]
+                    date_str  = pd.to_datetime(row["date"]).strftime("%Y-%m-%d")
+                    day_exps  = _exp_copy[_exp_copy["_date_str"] == date_str]
                     lines = []
                     for _, exp in day_exps.iterrows():
                         amt = _expense_amount_for_person(exp, row["person"])
