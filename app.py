@@ -1737,6 +1737,21 @@ with tab_ingresos:
 with tab_sg:
     st.markdown("## 🧍 Finanzas · Santiago")
 
+    # Detectar cambio de mes y ofrecer reset de saldos
+    _sg_month_key = "sg_last_month"
+    _sg_prev = st.session_state.get(_sg_month_key)
+    _sg_curr = (M, Y)
+    if _sg_prev is not None and _sg_prev != _sg_curr:
+        _prev_name = f"{db.MONTHS_ES.get(_sg_prev[0], '')} {_sg_prev[1]}"
+        st.info(f"📅 Pasaste de **{_prev_name}** a **{sel_month_name} {Y}** — recordá actualizar los saldos.")
+        if st.button("🔄 Resetear saldos a $0 para el nuevo mes", type="secondary"):
+            for _, _acc in _sg_accounts().iterrows():
+                db.update_sg_account_balance(int(_acc["id"]), 0.0)
+            _clear_sg_cache()
+            st.session_state[_sg_month_key] = _sg_curr
+            st.rerun()
+    st.session_state[_sg_month_key] = _sg_curr
+
     sg_accs  = _sg_accounts()
     sg_debts = _sg_debts()
 
