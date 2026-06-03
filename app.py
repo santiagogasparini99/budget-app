@@ -217,6 +217,25 @@ with st.sidebar:
 
     st.caption("v2.0 · SG & AZ")
 
+# Tab key selects highlighted option in any open selectbox dropdown
+components.html("""<script>
+(function(){
+  var d=window.parent.document;
+  if(d._tabSelectReady) return;
+  d._tabSelectReady=true;
+  d.addEventListener('keydown',function(e){
+    if(e.key!=='Tab') return;
+    var lb=d.querySelector('[role="listbox"]');
+    if(!lb) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var ae=d.activeElement;
+    if(ae) ae.dispatchEvent(new KeyboardEvent('keydown',
+      {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+  },true);
+})();
+</script>""", height=0)
+
 
 # ─── Fragment: formulario nuevo gasto ────────────────────────────────────────
 @st.fragment
