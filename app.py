@@ -469,7 +469,7 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
             _pc = {"SG": "#4a9eff", "AZ": "#ff8c42"}
             c_who.markdown(
                 f"<span style='color:{_pc.get(row['payer'], '#fff')};font-weight:600'>"
-                f"{db.PERSON_NAMES.get(row['payer'], row['payer'])}</span>",
+                f"{row['payer']}</span>",
                 unsafe_allow_html=True,
             )
             c_amt.markdown(f"**&#36;{row['amount']:,.0f}**")
