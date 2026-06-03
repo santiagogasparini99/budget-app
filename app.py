@@ -263,6 +263,7 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
                 elif split_type == "custom":
                     db.add_savings_entry(payer, amt * (1 - opct), "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
                     db.add_savings_entry(other, amt * opct,        "deposit", desc_s, expense_date.isoformat(), expense_id=new_exp_id)
+                st.session_state["balloons_ahorros"] = True
             st.session_state["nexp_fk"] += 1
             _clear_cache()
             st.rerun()  # full app rerun para refrescar lista
@@ -1313,6 +1314,8 @@ with tab_deudas:
 #  TAB 5 · AHORROS
 # ══════════════════════════════════════════════════════════════════════════════
 with tab_ahorros:
+    if st.session_state.pop("balloons_ahorros", False):
+        st.balloons()
     st.markdown("## 💰 Ahorros")
 
     ENTRY_LABELS = {
@@ -1370,6 +1373,8 @@ with tab_ahorros:
                             db.add_savings_entry(person, float(sv_amount), sv_type,
                                                  sv_desc.strip(), sv_date.isoformat())
                             st.success("✅ Movimiento guardado!")
+                            if sv_type == "deposit":
+                                st.session_state["balloons_ahorros"] = True
                             _clear_cache(); st.rerun()
 
             with st.expander("📈 Rentabilidad"):
