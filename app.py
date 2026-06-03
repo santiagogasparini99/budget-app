@@ -939,12 +939,16 @@ with tab_dash:
         marker=dict(size=5, symbol="diamond"),
         hovertemplate=HOVER_PROJ,
     ))
-    # "Hoy" marker — first point
-    fig_proj.add_vline(
-        x=proj_months[0], line_width=1.5,
-        line_dash="dash", line_color="rgba(255,255,255,0.25)",
-        annotation_text="hoy", annotation_position="top",
-        annotation_font=dict(color="#8a94b0", size=11),
+    # "Hoy" marker — first point (add_shape works with categorical x-axis)
+    fig_proj.add_shape(
+        type="line", xref="x", yref="paper",
+        x0=proj_months[0], x1=proj_months[0], y0=0, y1=1,
+        line=dict(color="rgba(255,255,255,0.2)", width=1.5, dash="dash"),
+    )
+    fig_proj.add_annotation(
+        x=proj_months[0], y=1, yref="paper",
+        text="hoy", showarrow=False,
+        font=dict(color="#8a94b0", size=11), yanchor="bottom",
     )
     fig_proj.update_layout(
         height=300, margin=dict(l=0, r=0, t=10, b=0),
