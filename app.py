@@ -1744,14 +1744,12 @@ with tab_sg:
     deviation     = net_position - sg_restante
     dev_pct       = (deviation / sg_restante * 100) if sg_restante > 0 else 0.0
 
-    if dev_pct > 15:
-        dev_color, dev_label, dev_icon = "#56d17e", "Muy por arriba del presupuesto", "🟢"
-    elif dev_pct >= -10:
-        dev_color, dev_label, dev_icon = "#4a9eff", "Cerca del presupuesto", "🔵"
-    elif dev_pct >= -30:
-        dev_color, dev_label, dev_icon = "#f6ad55", "Por debajo del presupuesto", "⚠️"
+    if deviation >= 0:
+        dev_color, dev_label, dev_icon = "#56d17e", "Plata alcanza para el presupuesto", "✅"
+    elif dev_pct >= -20:
+        dev_color, dev_label, dev_icon = "#f6ad55", "Plata algo corta", "⚠️"
     else:
-        dev_color, dev_label, dev_icon = "#ff6b6b", "Alerta: muy por debajo", "🚨"
+        dev_color, dev_label, dev_icon = "#ff6b6b", "Plata no alcanza", "🚨"
 
     dev_sign = "+" if deviation >= 0 else ""
     st.markdown(
