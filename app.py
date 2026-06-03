@@ -252,29 +252,41 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
     st.caption(_SPLIT_CAPTIONS[split_type])
     split_pct = None
     if split_type == "custom":
-        split_pct = st.slider("% que paga el otro", 0, 100, 50, step=5,
-                              key=f"nexp_pct_{fk}",
-                              help="Ej: 30 → el otro paga el 30%, vos el 70%")
-        if amount:
-            _other_amt = float(amount) * split_pct / 100
-            _my_amt    = float(amount) * (1 - split_pct / 100)
-            _other_name = db.PERSON_NAMES["AZ" if payer == "SG" else "SG"]
-            _my_name    = db.PERSON_NAMES[payer]
-            sc1, sc2 = st.columns(2)
-            sc1.markdown(
-                f"<div style='background:#1a2035;border-radius:8px;padding:8px 12px;text-align:center'>"
-                f"<div style='color:#8a94b0;font-size:0.75em'>{_my_name} paga</div>"
-                f"<div style='color:#4a9eff;font-size:1.2em;font-weight:700'>${_my_amt:,.0f}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-            sc2.markdown(
-                f"<div style='background:#1a2035;border-radius:8px;padding:8px 12px;text-align:center'>"
-                f"<div style='color:#8a94b0;font-size:0.75em'>{_other_name} paga</div>"
-                f"<div style='color:#ff8c42;font-size:1.2em;font-weight:700'>${_other_amt:,.0f}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+        _total_amt   = float(amount) if amount else 0.0
+        _other_name  = db.PERSON_NAMES["AZ" if payer == "SG" else "SG"]
+        _my_name     = db.PERSON_NAMES[payer]
+        _custom_mode = st.radio("Definir por", ["% Porcentaje", "$ Monto"],
+                                horizontal=True, key=f"nexp_cmode_{fk}")
+
+        if _custom_mode == "% Porcentaje":
+            split_pct = st.slider(f"% que paga {_other_name}", 0, 100, 50, step=1,
+                                  key=f"nexp_pct_{fk}")
+            if _total_amt:
+                _my_amt    = _total_amt * (1 - split_pct / 100)
+                _other_amt = _total_amt * split_pct / 100
+                sc1, sc2 = st.columns(2)
+                sc1.markdown(
+                    f"<div style='background:#1a2035;border-radius:8px;padding:8px 12px;text-align:center'>"
+                    f"<div style='color:#8a94b0;font-size:0.75em'>{_my_name} paga</div>"
+                    f"<div style='color:#4a9eff;font-size:1.2em;font-weight:700'>${_my_amt:,.0f}</div>"
+                    f"</div>", unsafe_allow_html=True)
+                sc2.markdown(
+                    f"<div style='background:#1a2035;border-radius:8px;padding:8px 12px;text-align:center'>"
+                    f"<div style='color:#8a94b0;font-size:0.75em'>{_other_name} paga</div>"
+                    f"<div style='color:#ff8c42;font-size:1.2em;font-weight:700'>${_other_amt:,.0f}</div>"
+                    f"</div>", unsafe_allow_html=True)
+        else:
+            _default_other = _total_amt * 0.5
+            mc1, mc2 = st.columns(2)
+            _my_inp    = mc1.number_input(f"{_my_name} paga ($)", min_value=0.0,
+                                          value=max(0.0, _total_amt - _default_other),
+                                          step=1.0, format="%.0f", key=f"nexp_my_amt_{fk}")
+            _other_inp = mc2.number_input(f"{_other_name} paga ($)", min_value=0.0,
+                                          value=_default_other,
+                                          step=1.0, format="%.0f", key=f"nexp_other_amt_{fk}")
+            split_pct  = (_other_inp / _total_amt * 100) if _total_amt > 0 else 50.0
+            if _total_amt:
+                st.caption(f"Split: {_my_name} {100-split_pct:.1f}% · {_other_name} {split_pct:.1f}%")
 
     notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…",
                          key=f"nexp_notes_{fk}")
