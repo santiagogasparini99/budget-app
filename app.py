@@ -276,14 +276,27 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
                     f"<div style='color:#ff8c42;font-size:1.2em;font-weight:700'>${_other_amt:,.0f}</div>"
                     f"</div>", unsafe_allow_html=True)
         else:
-            _default_other = _total_amt * 0.5
+            _mk  = f"nexp_my_amt_{fk}"
+            _ok  = f"nexp_other_amt_{fk}"
+            _tk  = f"nexp_total_custom_{fk}"
+            # Reset to 50/50 when total amount changes
+            if st.session_state.get(_tk) != _total_amt:
+                st.session_state[_mk] = _total_amt * 0.5
+                st.session_state[_ok] = _total_amt * 0.5
+                st.session_state[_tk] = _total_amt
+
+            def _on_my_change():
+                st.session_state[_ok] = max(0.0, _total_amt - st.session_state[_mk])
+            def _on_other_change():
+                st.session_state[_mk] = max(0.0, _total_amt - st.session_state[_ok])
+
             mc1, mc2 = st.columns(2)
-            _my_inp    = mc1.number_input(f"{_my_name} paga ($)", min_value=0.0,
-                                          value=max(0.0, _total_amt - _default_other),
-                                          step=1.0, format="%.0f", key=f"nexp_my_amt_{fk}")
-            _other_inp = mc2.number_input(f"{_other_name} paga ($)", min_value=0.0,
-                                          value=_default_other,
-                                          step=1.0, format="%.0f", key=f"nexp_other_amt_{fk}")
+            mc1.number_input(f"{_my_name} paga ($)", min_value=0.0, max_value=float(_total_amt or 0),
+                             step=1.0, format="%.0f", key=_mk, on_change=_on_my_change)
+            mc2.number_input(f"{_other_name} paga ($)", min_value=0.0, max_value=float(_total_amt or 0),
+                             step=1.0, format="%.0f", key=_ok, on_change=_on_other_change)
+            _my_inp    = st.session_state[_mk]
+            _other_inp = st.session_state[_ok]
             split_pct  = (_other_inp / _total_amt * 100) if _total_amt > 0 else 50.0
             if _total_amt:
                 st.caption(f"Split: {_my_name} {100-split_pct:.1f}% · {_other_name} {split_pct:.1f}%")
