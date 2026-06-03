@@ -787,9 +787,31 @@ with tab_dash:
                 if len(persons_dash) < 2:
                     daily = daily[daily["person"] == persons_dash[0]]
                 daily["Persona"] = daily["person"].map(db.PERSON_NAMES)
+
+                # Build per-(date, person) expense detail for tooltip
+                _exp_copy = expenses_df.copy()
+                _exp_copy["_date"] = pd.to_datetime(_exp_copy["date"]).dt.date
+
+                def _day_detail(row):
+                    day_exps = _exp_copy[_exp_copy["_date"] == pd.to_datetime(row["date"]).date()]
+                    lines = []
+                    for _, exp in day_exps.iterrows():
+                        amt = _expense_amount_for_person(exp, row["person"])
+                        if amt > 0:
+                            cat = exp["category_name"]
+                            lines.append(
+                                f"<span style='color:#8a94b0'>{exp['description']}</span>"
+                                f"<span style='color:#6b7fa3'> · {cat}</span>"
+                                f"  <b style='color:#7eb8f7'>${amt:,.0f}</b>"
+                            )
+                    return "<br>".join(lines) if lines else ""
+
+                daily["detail"] = daily.apply(_day_detail, axis=1)
+
                 fig_daily = px.area(
                     daily, x="date", y="amount", color="Persona",
-                    color_discrete_map={"Santiago": "#667eea", "Alex": "#f093fb"},
+                    custom_data=["detail"],
+                    color_discrete_map={"Santiago": "#4a9eff", "Alex": "#ff8c42"},
                     labels={"amount": "Monto ($)", "date": "Fecha"},
                     markers=True,
                 )
@@ -799,18 +821,17 @@ with tab_dash:
                     paper_bgcolor="rgba(0,0,0,0)",
                 )
                 fig_daily.update_xaxes(
-                    showgrid=False,
-                    type="date",
-                    tickformat="%d %b",   # e.g. "28 May" — never shows hours
-                    dtick="D1",           # one tick per day
+                    showgrid=False, type="date",
+                    tickformat="%d %b", dtick="D1",
                 )
-                fig_daily.update_yaxes(gridcolor="#f0f0f0")
+                fig_daily.update_yaxes(gridcolor="#1e2535")
                 fig_daily.update_traces(
                     hovertemplate=(
-                        "<b>%{fullData.name}</b><br>"
-                        "<span style='color:#6b7fa3'>──────────────────</span><br>"
-                        "<span style='color:#8a94b0'>%{x|%d %b}</span><br>"
-                        "<b style='color:#7eb8f7'>$%{y:,.2f}</b>"
+                        "<b>%{fullData.name}</b>"
+                        "  <span style='color:#8a94b0'>%{x|%d %b}</span>"
+                        "  <b style='color:#e2e8f0'>$%{y:,.0f}</b><br>"
+                        "<span style='color:#3a4460'>──────────────────</span><br>"
+                        "%{customdata[0]}"
                         "<extra></extra>"
                     )
                 )
@@ -825,6 +846,26 @@ with tab_dash:
                     .sum().sort_values(ascending=False).head(8)
                 )
                 if not cat_totals.empty:
+                    # Build per-category expense detail for tooltip
+                    def _cat_detail(cat_name):
+                        cat_exps = expenses_df[expenses_df["category_name"] == cat_name]
+                        lines = []
+                        for _, exp in cat_exps.iterrows():
+                            amt = sum(_expense_amount_for_person(exp, p) for p in persons_dash)
+                            if amt > 0:
+                                try:
+                                    fmt_d = pd.to_datetime(exp["date"]).strftime("%d %b")
+                                except Exception:
+                                    fmt_d = str(exp["date"])[:10]
+                                lines.append(
+                                    f"<span style='color:#8a94b0'>{fmt_d}</span>"
+                                    f"  <span style='color:#c8d0e7'>{exp['description']}</span>"
+                                    f"  <b style='color:#7eb8f7'>${amt:,.0f}</b>"
+                                )
+                        return "<br>".join(lines) if lines else ""
+
+                    cat_details = [_cat_detail(c) for c in cat_totals.index]
+
                     fig_pie = px.pie(
                         values=cat_totals.values, names=cat_totals.index,
                         hole=0.42,
@@ -838,11 +879,13 @@ with tab_dash:
                     )
                     fig_pie.update_traces(
                         textposition="inside", textinfo="percent",
+                        customdata=[[d] for d in cat_details],
                         hovertemplate=(
-                            "<b>%{label}</b><br>"
-                            "<span style='color:#6b7fa3'>──────────────────</span><br>"
-                            "<b style='color:#7eb8f7'>$%{value:,.2f}</b>"
-                            "  <span style='color:#8a94b0'>(%{percent})</span>"
+                            "<b>%{label}</b>"
+                            "  <b style='color:#7eb8f7'>$%{value:,.0f}</b>"
+                            "  <span style='color:#8a94b0'>(%{percent})</span><br>"
+                            "<span style='color:#3a4460'>──────────────────</span><br>"
+                            "%{customdata[0]}"
                             "<extra></extra>"
                         ),
                     )
