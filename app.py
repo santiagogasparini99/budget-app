@@ -877,32 +877,70 @@ with tab_dash:
     else:
         rate_sg = rate_az = 0.0
 
-    # Build 13-point projection — combined SG + AZ
-    rate_total  = rate_sg + rate_az
-    bal_total   = bal_sg + bal_az
-    proj_months, proj_total = [], []
+    # Build 13-point projection — per person + combined
+    rate_total = rate_sg + rate_az
+    bal_total  = bal_sg + bal_az
+    proj_months = []
+    vals_sg, vals_az, vals_total = [], [], []
     for i in range(13):
-        m = ((M - 1 + i) % 12) + 1
-        y = Y + (M - 1 + i) // 12
-        proj_months.append(f"{db.MONTHS_ES[m][:3]} {y}")
-        proj_total.append(bal_total + rate_total * i)
+        mi = ((M - 1 + i) % 12) + 1
+        yi = Y + (M - 1 + i) // 12
+        proj_months.append(f"{db.MONTHS_ES[mi][:3]} {yi}")
+        vals_sg.append(bal_sg + rate_sg * i)
+        vals_az.append(bal_az + rate_az * i)
+        vals_total.append(bal_total + rate_total * i)
+
+    HOVER_PROJ = (
+        "<b>%{fullData.name}</b><br>"
+        "<span style='color:#6b7fa3'>──────────────────</span><br>"
+        "<span style='color:#8a94b0'>%{x}</span><br>"
+        "<b style='color:#7eb8f7'>$%{y:,.0f}</b>"
+        "<extra></extra>"
+    )
 
     fig_proj = go.Figure()
     fig_proj.add_trace(go.Scatter(
-        x=proj_months, y=proj_total,
-        name=f"Total SG + AZ (${rate_total:,.0f}/mes)",
+        x=proj_months, y=vals_sg,
+        name=f"Santiago  +${rate_sg:,.0f}/mes",
         mode="lines+markers",
-        line=dict(color="#667eea", width=3),
-        marker=dict(size=7),
-        fill="tozeroy", fillcolor="rgba(102,126,234,0.15)",
-        hovertemplate="<b>Total Ahorros</b><br>%{x}<br>$%{y:,.0f}<extra></extra>",
+        line=dict(color="#4a9eff", width=2.5),
+        marker=dict(size=6, symbol="circle"),
+        fill="tozeroy", fillcolor="rgba(74,158,255,0.08)",
+        hovertemplate=HOVER_PROJ,
     ))
+    fig_proj.add_trace(go.Scatter(
+        x=proj_months, y=vals_az,
+        name=f"Alex  +${rate_az:,.0f}/mes",
+        mode="lines+markers",
+        line=dict(color="#ff8c42", width=2.5),
+        marker=dict(size=6, symbol="circle"),
+        fill="tozeroy", fillcolor="rgba(255,140,66,0.08)",
+        hovertemplate=HOVER_PROJ,
+    ))
+    fig_proj.add_trace(go.Scatter(
+        x=proj_months, y=vals_total,
+        name=f"Total  +${rate_total:,.0f}/mes",
+        mode="lines+markers",
+        line=dict(color="#a78bfa", width=2, dash="dot"),
+        marker=dict(size=5, symbol="diamond"),
+        hovertemplate=HOVER_PROJ,
+    ))
+    # "Hoy" marker — first point
+    fig_proj.add_vline(
+        x=proj_months[0], line_width=1.5,
+        line_dash="dash", line_color="rgba(255,255,255,0.25)",
+        annotation_text="hoy", annotation_position="top",
+        annotation_font=dict(color="#8a94b0", size=11),
+    )
     fig_proj.update_layout(
-        height=280, margin=dict(l=0, r=0, t=20, b=0),
+        height=300, margin=dict(l=0, r=0, t=10, b=0),
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", y=1.12, font_size=11),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(gridcolor="#2d3748", tickprefix="$"),
+        legend=dict(orientation="h", y=1.12, font_size=11,
+                    bgcolor="rgba(0,0,0,0)"),
+        xaxis=dict(showgrid=False, tickfont=dict(color="#6b7fa3")),
+        yaxis=dict(gridcolor="#1e2535", tickprefix="$",
+                   tickfont=dict(color="#6b7fa3")),
+        hovermode="x unified",
     )
     st.plotly_chart(fig_proj, use_container_width=True, config={"displayModeBar": False})
 
