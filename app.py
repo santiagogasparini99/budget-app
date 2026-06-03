@@ -1892,9 +1892,6 @@ with tab_sg:
                                             nd_desc.strip() or None, nd_date.isoformat())
                     _clear_sg_cache(); st.rerun()
 
-    st.divider()
-
-    # ── Actualizar saldos ─────────────────────────────────────────────────────
     with st.expander("✏️ Actualizar saldos (bancos y tarjetas)"):
         with st.form("sg_update_balances"):
             upd_vals = {}
