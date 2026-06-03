@@ -344,14 +344,18 @@ def add_expense(
     budget_month: int = None,
     budget_year: int = None,
     split_pct: float = None,
+    payment_source_id: int = None,
+    payment_applied_amount: float = None,
 ):
     with get_conn() as conn:
         cur = _run(conn, """
             INSERT INTO expenses
-              (description, category_id, payer, amount, split_type, date, notes, budget_month, budget_year, split_pct)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+              (description, category_id, payer, amount, split_type, date, notes,
+               budget_month, budget_year, split_pct, payment_source_id, payment_applied_amount)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
-        """, (description, category_id, payer, amount, split_type, expense_date, notes, budget_month, budget_year, split_pct))
+        """, (description, category_id, payer, amount, split_type, expense_date, notes,
+              budget_month, budget_year, split_pct, payment_source_id, payment_applied_amount))
         return int(cur.fetchone()[0])
 
 
@@ -361,6 +365,7 @@ def get_expenses(month: int = None, year: int = None) -> pd.DataFrame:
             SELECT e.id, e.description, e.payer, e.amount, e.split_type,
                    e.date, e.budget_month, e.budget_year, e.notes, e.created_at,
                    e.is_reconciled, e.split_pct,
+                   e.payment_source_id, e.payment_applied_amount,
                    c.id as category_id, c.name as category_name, c.color
             FROM expenses e
             JOIN categories c ON e.category_id = c.id
@@ -393,16 +398,20 @@ def update_expense(
     budget_month: int = None,
     budget_year: int = None,
     split_pct: float = None,
+    payment_source_id: int = None,
+    payment_applied_amount: float = None,
 ):
     with get_conn() as conn:
         _run(conn, """
             UPDATE expenses SET
                 description=%s, category_id=%s, payer=%s, amount=%s,
                 split_type=%s, date=%s, notes=%s, budget_month=%s,
-                budget_year=%s, split_pct=%s
+                budget_year=%s, split_pct=%s,
+                payment_source_id=%s, payment_applied_amount=%s
             WHERE id=%s
         """, (description, category_id, payer, amount, split_type,
-              expense_date, notes, budget_month, budget_year, split_pct, expense_id))
+              expense_date, notes, budget_month, budget_year, split_pct,
+              payment_source_id, payment_applied_amount, expense_id))
 
 
 def delete_savings_by_expense(expense_id: int):
@@ -926,10 +935,18 @@ def init_sg_tables():
                 INSERT INTO sg_accounts (account_name, account_type, balance)
                 VALUES (%s, %s, 0) ON CONFLICT (account_name) DO NOTHING
             """, (name, atype))
+        # Add payment columns to expenses if not present
+        _run(conn, "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_source_id INTEGER REFERENCES sg_accounts(id)")
+        _run(conn, "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_applied_amount DECIMAL(12,2)")
 
 def get_sg_accounts() -> pd.DataFrame:
     with get_conn() as conn:
         return _df(conn, "SELECT * FROM sg_accounts ORDER BY account_type DESC, account_name")
+
+def get_sg_account(account_id: int) -> dict:
+    with get_conn() as conn:
+        df = _df(conn, "SELECT * FROM sg_accounts WHERE id=%s", (account_id,))
+        return df.iloc[0].to_dict() if not df.empty else {}
 
 def update_sg_account_balance(account_id: int, balance: float):
     with get_conn() as conn:

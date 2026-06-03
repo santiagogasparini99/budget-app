@@ -76,6 +76,24 @@ def _sg_debts():          return db.get_sg_personal_debts(only_pending=True)
 def _clear_sg_cache():
     _sg_accounts.clear(); _sg_debts.clear()
 
+def _apply_payment(account_id: int, expense_amount: float) -> float:
+    """Subtract expense from bank or add to CC debt. Returns signed delta applied."""
+    acc = db.get_sg_account(account_id)
+    if not acc:
+        return 0.0
+    delta = -expense_amount if acc["account_type"] == "bank" else +expense_amount
+    db.update_sg_account_balance(account_id, float(acc["balance"]) + delta)
+    _clear_sg_cache()
+    return delta
+
+def _reverse_payment(account_id: int, applied_amount: float):
+    """Undo a previous payment application."""
+    acc = db.get_sg_account(account_id)
+    if not acc:
+        return
+    db.update_sg_account_balance(account_id, float(acc["balance"]) - applied_amount)
+    _clear_sg_cache()
+
 st.set_page_config(
     page_title="El jardín 🪲 · SG & AZ",
     page_icon="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1fab2.png",
@@ -241,6 +259,19 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
     notes = st.text_area("Notas (opcional)", height=55, placeholder="Detalles adicionales…",
                          key=f"nexp_notes_{fk}")
 
+    # Payment source
+    _sg_accs_pay = _sg_accounts()
+    _pay_opts = {"none": "— No indicado"}
+    for _, _ar in _sg_accs_pay.iterrows():
+        _icon = "🏦" if _ar["account_type"] == "bank" else "💳"
+        _pay_opts[int(_ar["id"])] = f"{_icon} {_ar['account_name']}"
+    payment_source_key = st.selectbox(
+        "Con qué se pagó", list(_pay_opts.keys()),
+        format_func=lambda x: _pay_opts[x],
+        key=f"nexp_psource_{fk}",
+    )
+    payment_source_id = None if payment_source_key == "none" else int(payment_source_key)
+
     st.caption(f"📅 Se asignará al presupuesto de **{db.MONTHS_ES[M]} {Y}**")
     if cat_name in _SAVINGS_CATS:
         st.info("💰 Esta categoría también agregará el monto a Ahorros automáticamente.")
@@ -253,11 +284,16 @@ def _new_expense_panel(M: int, Y: int, cat_name_to_id: dict):
         else:
             bm = M if (expense_date.month != M or expense_date.year != Y) else None
             by = Y if bm is not None else None
+            applied_amount = None
+            if payment_source_id:
+                applied_amount = _apply_payment(payment_source_id, float(amount))
             new_exp_id = db.add_expense(
                 description.strip(), cat_name_to_id[cat_name], payer, float(amount),
                 split_type, expense_date.isoformat(), notes.strip() or None,
                 budget_month=bm, budget_year=by,
                 split_pct=float(split_pct) if split_pct is not None else None,
+                payment_source_id=payment_source_id,
+                payment_applied_amount=applied_amount,
             )
             if cat_name in _SAVINGS_CATS:
                 amt    = float(amount)
@@ -406,6 +442,23 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                 e_notes = st.text_area("Notas (opcional)",
                                        value=row.get("notes") or "", height=55)
 
+                # Payment source for edit
+                _sg_accs_edit = _sg_accounts()
+                _epay_opts = {"none": "— No indicado"}
+                for _, _ear in _sg_accs_edit.iterrows():
+                    _eicon = "🏦" if _ear["account_type"] == "bank" else "💳"
+                    _epay_opts[int(_ear["id"])] = f"{_eicon} {_ear['account_name']}"
+                _old_psid = row.get("payment_source_id")
+                _old_psid_val = int(_old_psid) if _old_psid and not pd.isna(_old_psid) else "none"
+                _epay_keys = list(_epay_opts.keys())
+                e_payment_key = st.selectbox(
+                    "Con qué se pagó",
+                    _epay_keys,
+                    index=_epay_keys.index(_old_psid_val) if _old_psid_val in _epay_keys else 0,
+                    format_func=lambda x: _epay_opts[x],
+                )
+                e_payment_source_id = None if e_payment_key == "none" else int(e_payment_key)
+
                 es1, es2 = st.columns(2)
                 save_edit   = es1.form_submit_button("💾 Actualizar", use_container_width=True, type="primary")
                 cancel_edit = es2.form_submit_button("✖ Cancelar",   use_container_width=True)
@@ -416,6 +469,14 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                     elif e_amount <= 0:
                         st.error("El monto debe ser mayor a $0.")
                     else:
+                        # Reverse old payment, apply new
+                        _old_paid = row.get("payment_applied_amount")
+                        if _old_psid_val != "none" and _old_paid and not pd.isna(_old_paid):
+                            _reverse_payment(int(_old_psid_val), float(_old_paid))
+                        e_applied = None
+                        if e_payment_source_id:
+                            e_applied = _apply_payment(e_payment_source_id, float(e_amount))
+
                         final_split_pct = float(e_split_pct) if e_split_type == "custom" else None
                         db.update_expense(
                             row_id,
@@ -428,6 +489,8 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                             e_notes.strip() or None,
                             e_bm, e_by,
                             final_split_pct,
+                            payment_source_id=e_payment_source_id,
+                            payment_applied_amount=e_applied,
                         )
                         db.delete_savings_by_expense(row_id)
                         if e_cat_name in SAVINGS_CATS:
@@ -508,6 +571,10 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
                     st.rerun()
                 if b2.button("🗑", key=f"del_e_{row_id}", help="Eliminar",
                              use_container_width=True):
+                    _psid = row.get("payment_source_id")
+                    _paid = row.get("payment_applied_amount")
+                    if _psid and not pd.isna(_psid) and _paid and not pd.isna(_paid):
+                        _reverse_payment(int(_psid), float(_paid))
                     db.delete_expense(row_id)
                     _clear_cache(); st.rerun()
 
@@ -1750,11 +1817,8 @@ with tab_sg:
 
     st.markdown("")
 
-    # Detail cards
+    # Detail cards — only third parties (Alex already shown in summary above)
     debt_cards = []
-    if alexis_owes_me > 0:
-        debt_cards.append({"label": "Alex", "amount": alexis_owes_me,
-                           "sub": "deuda del período", "color": "#ff8c42", "id": None})
     for _, drow in sg_debts.iterrows():
         ddate = pd.to_datetime(drow["date"]).strftime("%d %b %Y") if drow["date"] else ""
         desc  = drow["description"] or ""
