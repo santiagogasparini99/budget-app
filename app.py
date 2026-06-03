@@ -522,7 +522,7 @@ def _build_expense_tooltip(person: str, category_name: str,
         for _, exp in expenses_df[expenses_df["category_name"] == category_name].iterrows():
             person_amt = _expense_amount_for_person(exp, person)
             if person_amt > 0:
-                exp_date = str(exp["date"])[:10] if exp["date"] else ""
+                exp_date = pd.to_datetime(exp["date"]).strftime("%b-%d") if exp["date"] else ""
                 lines.append(f"{exp_date}  {exp['description']}: ${person_amt:,.2f}")
     if lines:
         return "<br>".join(lines) + f"<br>━━━━━━━━━━━━<br><b>Restante: ${remaining:,.2f}</b>"
