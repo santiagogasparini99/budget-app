@@ -1269,7 +1269,7 @@ def _deudas_panel(M: int, Y: int):
                 reconciled = (row.get("is_reconciled") or 0) == 1
                 fade       = "opacity:0.4;" if reconciled else ""
                 tag        = " · <b style='color:#38a169'>Acumulada</b>" if reconciled else " · <b style='color:#e53e3e'>Período</b>"
-                c1, c2, c3 = st.columns([2.5, 1.6, 1.2])
+                c1, c2, c3 = st.columns([2.5, 1.6, 2.0])
                 c1.markdown(
                     f"<div style='{fade}'>"
                     f"<b>{row['description']}</b> — ${row['amount']:,.0f}<br>"
@@ -1284,12 +1284,20 @@ def _deudas_panel(M: int, Y: int):
                     f"</div>",
                     unsafe_allow_html=True,
                 )
+                c3, c4 = st.columns(2) if not reconciled else (c3, None)
                 if reconciled:
                     if c3.button("↩ Period.", key=f"unrec_{row['id']}", help="Volver a deuda del período", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=False)
                         _clear_cache(); st.rerun(scope="fragment")
                 else:
-                    if c3.button("Acum. →", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
+                    debtor  = "AZ" if row["payer"] == "SG" else "SG"
+                    creditor = row["payer"]
+                    if c3.button("✅", key=f"settle_{row['id']}", help="Marcar como saldado", use_container_width=True):
+                        db.add_settlement(debtor, creditor, debt_amt,
+                                          f"Saldado: {row['description']}", date.today().isoformat(),
+                                          debt_type="period")
+                        _clear_cache(); st.rerun(scope="fragment")
+                    if c4.button("📦", key=f"rec_{row['id']}", help="Mover a deuda acumulada", use_container_width=True):
                         db.reconcile_expense(int(row["id"]), reconciled=True)
                         _clear_cache(); st.rerun(scope="fragment")
                 st.markdown("<hr style='margin:3px 0;border-color:#f5f5f5'>", unsafe_allow_html=True)
