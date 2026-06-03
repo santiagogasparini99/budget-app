@@ -505,8 +505,8 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_gastos, tab_dash, tab_deudas, tab_ahorros, tab_ingresos, tab_presup = st.tabs(
-    ["💸  Movimientos", "📊  Dashboard", "🤝  Deudas", "💰  Ahorros", "💵  Ingresos", "📋  Presupuesto"]
+tab_gastos, tab_dash, tab_deudas, tab_ingresos, tab_ahorros, tab_presup = st.tabs(
+    ["💸  Movimientos", "📊  Dashboard", "🤝  Deudas", "💵  Ingresos", "💰  Ahorros", "📋  Presupuesto"]
 )
 
 
