@@ -516,17 +516,35 @@ def _expense_amount_for_person(exp_row, person: str) -> float:
 
 
 def _build_expense_tooltip(person: str, category_name: str,
-                            expenses_df, remaining: float) -> str:
+                            expenses_df, spent: float, budget: float) -> str:
+    remaining = max(0.0, budget - spent)
+    over      = max(0.0, spent - budget)
+    SEP  = '<span style="color:#3a4460">──────────────────</span>'
+
     lines = []
     if expenses_df is not None and not expenses_df.empty:
         for _, exp in expenses_df[expenses_df["category_name"] == category_name].iterrows():
             person_amt = _expense_amount_for_person(exp, person)
             if person_amt > 0:
                 exp_date = pd.to_datetime(exp["date"]).strftime("%b-%d") if exp["date"] else ""
-                lines.append(f"{exp_date}  {exp['description']}: ${person_amt:,.2f}")
+                lines.append(
+                    f'<span style="color:#6b7fa3">{exp_date}</span>'
+                    f'  <span style="color:#c8d0e7">{exp["description"]}</span>'
+                    f'  <b style="color:#7eb8f7">${person_amt:,.2f}</b>'
+                )
+
+    if over > 0:
+        footer = f'<b style="color:#ff6b6b">⚠️ Exceso: ${over:,.2f}</b>'
+    elif remaining == 0:
+        footer = f'<b style="color:#56d17e">✅ Presupuesto agotado</b>'
+    else:
+        footer = f'<b style="color:#56d17e">💰 Restante: ${remaining:,.2f}</b>'
+
     if lines:
-        return "<br>".join(lines) + f"<br>━━━━━━━━━━━━<br><b>Restante: ${remaining:,.2f}</b>"
-    return f"<b>Restante: ${remaining:,.2f}</b>"
+        count = len(lines)
+        header = f'<span style="color:#8a94b0">📋 {count} gasto{"s" if count != 1 else ""}</span>'
+        return f"{header}<br>{SEP}<br>" + "<br>".join(lines) + f"<br>{SEP}<br>{footer}"
+    return f"{SEP}<br>{footer}"
 
 
 def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.DataFrame,
@@ -544,7 +562,7 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
             remaining = max(0.0, budget - spent)
             name      = db.PERSON_NAMES[person]
             label     = brow["category_name"] if len(persons) == 1 else f"{brow['category_name']}  ·  {name}"
-            tooltip   = _build_expense_tooltip(person, brow["category_name"], expenses_df, remaining)
+            tooltip   = _build_expense_tooltip(person, brow["category_name"], expenses_df, spent, budget)
             rows.append({
                 "label":   label,
                 "budget":  budget,
@@ -562,10 +580,11 @@ def progress_chart(persons: list, budgets_df: pd.DataFrame, spending_df: pd.Data
     df = pd.DataFrame(rows).sort_values("total", ascending=True)
 
     HOVER = (
-        "<b>%{y}</b><br>"
-        "Gastado: $%{customdata[0]:,.2f} / $%{customdata[1]:,.2f}<br>"
-        "%{customdata[2]:.1f}%<br>"
-        "──────────────<br>"
+        "<b style='font-size:13px'>%{y}</b><br>"
+        "<span style='color:#6b7fa3'>Gastado</span>  "
+        "<b style='color:#e2e8f0'>$%{customdata[0]:,.2f}</b>"
+        "<span style='color:#6b7fa3'>  /  $%{customdata[1]:,.2f}</span>"
+        "  <b>(%{customdata[2]:.1f}%)</b><br>"
         "%{customdata[3]}"
         "<extra></extra>"
     )
