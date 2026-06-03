@@ -955,6 +955,10 @@ def settle_sg_personal_debt(debt_id: int, paid_date: str):
         _run(conn, "UPDATE sg_personal_debts SET status='paid', paid_date=%s WHERE id=%s",
              (paid_date, debt_id))
 
+def update_sg_personal_debt_amount(debt_id: int, amount: float):
+    with get_conn() as conn:
+        _run(conn, "UPDATE sg_personal_debts SET amount=%s WHERE id=%s", (amount, debt_id))
+
 def delete_sg_personal_debt(debt_id: int):
     with get_conn() as conn:
         _run(conn, "DELETE FROM sg_personal_debts WHERE id=%s", (debt_id,))

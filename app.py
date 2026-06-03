@@ -1719,26 +1719,6 @@ with tab_sg:
 
     st.markdown("")
 
-    # ── Actualizar saldos ─────────────────────────────────────────────────────
-    with st.expander("✏️ Actualizar saldos"):
-        with st.form("sg_update_balances"):
-            upd_vals = {}
-            upd_cols = st.columns(2)
-            for i, (_, row) in enumerate(sg_accs.iterrows()):
-                icon = "🏦" if row["account_type"] == "bank" else "💳"
-                upd_vals[int(row["id"])] = upd_cols[i % 2].number_input(
-                    f"{icon} {row['account_name']}",
-                    value=float(row["balance"]),
-                    step=1.0, format="%.0f",
-                    key=f"upd_acc_{row['id']}",
-                )
-            if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
-                for acc_id, val in upd_vals.items():
-                    db.update_sg_account_balance(acc_id, val)
-                _clear_sg_cache(); st.rerun()
-
-    st.markdown("")
-
     # ── Resumen Me deben ──────────────────────────────────────────────────────
     st.markdown('<div class="sec-head">👥 Me deben</div>', unsafe_allow_html=True)
 
@@ -1769,29 +1749,18 @@ with tab_sg:
     )
 
     st.markdown("")
-    st.markdown('<div class="sec-head" style="font-size:0.85em">Detalle</div>', unsafe_allow_html=True)
 
-    # Build list of all debt cards: Alexis first (if positive), then third parties
+    # Detail cards
     debt_cards = []
     if alexis_owes_me > 0:
-        debt_cards.append({
-            "label": "Alex",
-            "amount": alexis_owes_me,
-            "sub": "deuda total con la app",
-            "color": "#ff8c42",
-            "id": None,
-        })
+        debt_cards.append({"label": "Alex", "amount": alexis_owes_me,
+                           "sub": "deuda del período", "color": "#ff8c42", "id": None})
     for _, drow in sg_debts.iterrows():
         ddate = pd.to_datetime(drow["date"]).strftime("%d %b %Y") if drow["date"] else ""
         desc  = drow["description"] or ""
-        sub   = f"{desc} · {ddate}" if desc else ddate
-        debt_cards.append({
-            "label":  drow["person_name"],
-            "amount": float(drow["amount"]),
-            "sub":    sub,
-            "color":  "#f6ad55",
-            "id":     int(drow["id"]),
-        })
+        debt_cards.append({"label": drow["person_name"], "amount": float(drow["amount"]),
+                           "sub": f"{desc} · {ddate}" if desc else ddate,
+                           "color": "#f6ad55", "id": int(drow["id"])})
 
     if not debt_cards:
         st.caption("Nadie te debe plata (por ahora).")
@@ -1807,8 +1776,7 @@ with tab_sg:
                     f"margin-bottom:4px'>{card['label']}</div>"
                     f"<div style='color:#56d17e;font-size:1.6em;font-weight:700'>"
                     f"+${card['amount']:,.0f}</div>"
-                    f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>"
-                    f"{card['sub']}</div>"
+                    f"<div style='color:#4a5568;font-size:0.72em;margin-top:6px'>{card['sub']}</div>"
                     f"</div>",
                     unsafe_allow_html=True,
                 )
@@ -1824,12 +1792,31 @@ with tab_sg:
                         _clear_sg_cache(); st.rerun()
 
     st.markdown("")
+
+    # Actualizar montos de terceros (no Alex)
+    if not sg_debts.empty:
+        with st.expander("✏️ Actualizar montos"):
+            with st.form("sg_update_debts"):
+                upd_debt_vals = {}
+                ud_cols = st.columns(2)
+                for i, (_, drow) in enumerate(sg_debts.iterrows()):
+                    upd_debt_vals[int(drow["id"])] = ud_cols[i % 2].number_input(
+                        drow["person_name"],
+                        value=float(drow["amount"]),
+                        step=1.0, format="%.0f",
+                        key=f"upd_debt_{drow['id']}",
+                    )
+                if st.form_submit_button("💾 Guardar montos", type="primary", use_container_width=True):
+                    for did, val in upd_debt_vals.items():
+                        db.update_sg_personal_debt_amount(did, val)
+                    _clear_sg_cache(); st.rerun()
+
     with st.expander("➕ Agregar nueva deuda"):
         with st.form("sg_new_debt", clear_on_submit=True):
             nd1, nd2 = st.columns(2)
             nd_person = nd1.text_input("Persona", placeholder="Ej: Juan")
             nd_amount = nd2.number_input("Monto ($)", min_value=0.01, value=None,
-                                         step=1000.0, format="%.0f")
+                                         step=1.0, format="%.0f")
             nd_desc = st.text_input("Descripción (opcional)", placeholder="Ej: Cena, préstamo…")
             nd_date = st.date_input("Fecha", value=date.today())
             if st.form_submit_button("💾 Guardar", type="primary", use_container_width=True):
@@ -1841,3 +1828,23 @@ with tab_sg:
                     db.add_sg_personal_debt(nd_person.strip(), float(nd_amount),
                                             nd_desc.strip() or None, nd_date.isoformat())
                     _clear_sg_cache(); st.rerun()
+
+    st.divider()
+
+    # ── Actualizar saldos ─────────────────────────────────────────────────────
+    with st.expander("✏️ Actualizar saldos (bancos y tarjetas)"):
+        with st.form("sg_update_balances"):
+            upd_vals = {}
+            upd_cols = st.columns(2)
+            for i, (_, row) in enumerate(sg_accs.iterrows()):
+                icon = "🏦" if row["account_type"] == "bank" else "💳"
+                upd_vals[int(row["id"])] = upd_cols[i % 2].number_input(
+                    f"{icon} {row['account_name']}",
+                    value=float(row["balance"]),
+                    step=1.0, format="%.0f",
+                    key=f"upd_acc_{row['id']}",
+                )
+            if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
+                for acc_id, val in upd_vals.items():
+                    db.update_sg_account_balance(acc_id, val)
+                _clear_sg_cache(); st.rerun()
