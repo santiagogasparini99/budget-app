@@ -505,8 +505,8 @@ def _expense_list_panel(M: int, Y: int, cat_name_to_id: dict,
 
 
 # ─── Tabs ─────────────────────────────────────────────────────────────────────
-tab_gastos, tab_presup, tab_dash, tab_deudas, tab_ahorros, tab_ingresos = st.tabs(
-    ["💸  Movimientos", "📋  Presupuesto", "📊  Dashboard", "🤝  Deudas", "💰  Ahorros", "💵  Ingresos"]
+tab_gastos, tab_dash, tab_deudas, tab_ahorros, tab_ingresos, tab_presup = st.tabs(
+    ["💸  Movimientos", "📊  Dashboard", "🤝  Deudas", "💰  Ahorros", "💵  Ingresos", "📋  Presupuesto"]
 )
 
 
@@ -789,34 +789,50 @@ with tab_dash:
                     daily = daily[daily["person"] == persons_dash[0]]
                 daily["Persona"] = daily["person"].map(db.PERSON_NAMES)
 
-                # Build per-(date, person) expense detail for tooltip
-                _exp_copy = expenses_df.copy()
-                _exp_copy["_date_str"] = pd.to_datetime(_exp_copy["date"]).dt.strftime("%Y-%m-%d")
-
-                def _day_detail(row):
-                    date_str  = pd.to_datetime(row["date"]).strftime("%Y-%m-%d")
-                    day_exps  = _exp_copy[_exp_copy["_date_str"] == date_str]
-                    lines = []
-                    for _, exp in day_exps.iterrows():
-                        amt = _expense_amount_for_person(exp, row["person"])
-                        if amt > 0:
-                            cat = exp["category_name"]
-                            lines.append(
-                                f"<span style='color:#8a94b0'>{exp['description']}</span>"
-                                f"<span style='color:#6b7fa3'> · {cat}</span>"
-                                f"  <b style='color:#7eb8f7'>${amt:,.0f}</b>"
+                # Pre-build detail lookup: (date_str, person) -> html lines
+                _detail_map = {}
+                for _, _exp in expenses_df.iterrows():
+                    _ds = pd.to_datetime(_exp["date"]).strftime("%Y-%m-%d")
+                    for _p in (daily["person"].unique()):
+                        _a = _expense_amount_for_person(_exp, _p)
+                        if _a > 0:
+                            _detail_map.setdefault((_ds, _p), []).append(
+                                f"<span style='color:#8a94b0'>{_exp['description']}</span>"
+                                f"<span style='color:#6b7fa3'> · {_exp['category_name']}</span>"
+                                f"  <b style='color:#7eb8f7'>${_a:,.0f}</b>"
                             )
-                    return "<br>".join(lines) if lines else ""
 
-                daily["detail"] = daily.apply(_day_detail, axis=1)
+                _PC = {"SG": "#4a9eff", "AZ": "#ff8c42"}
+                _FC = {"SG": "rgba(74,158,255,0.10)", "AZ": "rgba(255,140,66,0.10)"}
 
-                fig_daily = px.area(
-                    daily, x="date", y="amount", color="Persona",
-                    custom_data=["detail"],
-                    color_discrete_map={"Santiago": "#4a9eff", "Alex": "#ff8c42"},
-                    labels={"amount": "Monto ($)", "date": "Fecha"},
-                    markers=True,
-                )
+                fig_daily = go.Figure()
+                for _p in sorted(daily["person"].unique()):
+                    _pd = daily[daily["person"] == _p].sort_values("date")
+                    _xs, _ys, _cd = [], [], []
+                    for _, _r in _pd.iterrows():
+                        _ds = pd.to_datetime(_r["date"]).strftime("%Y-%m-%d")
+                        _xs.append(_r["date"])
+                        _ys.append(_r["amount"])
+                        _lines = _detail_map.get((_ds, _p), [])
+                        _cd.append(["<br>".join(_lines) if _lines else "—"])
+                    _col = _PC.get(_p, "#fff")
+                    fig_daily.add_trace(go.Scatter(
+                        x=_xs, y=_ys,
+                        name=db.PERSON_NAMES[_p],
+                        mode="lines+markers",
+                        line=dict(color=_col, width=2.5),
+                        marker=dict(size=6, color=_col),
+                        fill="tozeroy", fillcolor=_FC.get(_p, "rgba(255,255,255,0.05)"),
+                        customdata=_cd,
+                        hovertemplate=(
+                            f"<b style='color:{_col}'>{db.PERSON_NAMES[_p]}</b>"
+                            "  <span style='color:#8a94b0'>%{x|%d %b}</span>"
+                            "  <b style='color:#e2e8f0'>$%{y:,.0f}</b><br>"
+                            "<span style='color:#3a4460'>──────────────────</span><br>"
+                            "%{customdata[0]}"
+                            "<extra></extra>"
+                        ),
+                    ))
                 fig_daily.update_layout(
                     height=270, margin=dict(l=0, r=0, t=10, b=0),
                     legend_title="", plot_bgcolor="rgba(0,0,0,0)",
@@ -827,16 +843,6 @@ with tab_dash:
                     tickformat="%d %b", dtick="D1",
                 )
                 fig_daily.update_yaxes(gridcolor="#1e2535")
-                fig_daily.update_traces(
-                    hovertemplate=(
-                        "<b>%{fullData.name}</b>"
-                        "  <span style='color:#8a94b0'>%{x|%d %b}</span>"
-                        "  <b style='color:#e2e8f0'>$%{y:,.0f}</b><br>"
-                        "<span style='color:#3a4460'>──────────────────</span><br>"
-                        "%{customdata[0]}"
-                        "<extra></extra>"
-                    )
-                )
                 st.plotly_chart(fig_daily, use_container_width=True, config={"displayModeBar": False})
 
         with c_right:
