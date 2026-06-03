@@ -887,3 +887,74 @@ def build_excel_export(month: int, year: int) -> bytes:
     wb.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+
+# ─── Santiago personal finances ───────────────────────────────────────────────
+
+_SG_DEFAULT_ACCOUNTS = [
+    ("Banco de Chile", "bank"),
+    ("Santander",      "bank"),
+    ("Tarjeta Santander", "credit"),
+    ("CMR",            "credit"),
+]
+
+def init_sg_tables():
+    with get_conn() as conn:
+        _run(conn, """
+            CREATE TABLE IF NOT EXISTS sg_accounts (
+                id           SERIAL PRIMARY KEY,
+                account_name VARCHAR(100) UNIQUE NOT NULL,
+                account_type VARCHAR(20)  NOT NULL,
+                balance      DECIMAL(12,2) NOT NULL DEFAULT 0,
+                updated_at   TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        _run(conn, """
+            CREATE TABLE IF NOT EXISTS sg_personal_debts (
+                id          SERIAL PRIMARY KEY,
+                person_name VARCHAR(100) NOT NULL,
+                amount      DECIMAL(12,2) NOT NULL,
+                description TEXT,
+                date        DATE NOT NULL,
+                status      VARCHAR(20) DEFAULT 'pending',
+                paid_date   DATE,
+                created_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        for name, atype in _SG_DEFAULT_ACCOUNTS:
+            _run(conn, """
+                INSERT INTO sg_accounts (account_name, account_type, balance)
+                VALUES (%s, %s, 0) ON CONFLICT (account_name) DO NOTHING
+            """, (name, atype))
+
+def get_sg_accounts() -> pd.DataFrame:
+    with get_conn() as conn:
+        return _df(conn, "SELECT * FROM sg_accounts ORDER BY account_type DESC, account_name")
+
+def update_sg_account_balance(account_id: int, balance: float):
+    with get_conn() as conn:
+        _run(conn, "UPDATE sg_accounts SET balance=%s, updated_at=NOW() WHERE id=%s",
+             (balance, account_id))
+
+def get_sg_personal_debts(only_pending: bool = True) -> pd.DataFrame:
+    with get_conn() as conn:
+        q = ("SELECT * FROM sg_personal_debts WHERE status='pending' ORDER BY date DESC"
+             if only_pending else
+             "SELECT * FROM sg_personal_debts ORDER BY date DESC")
+        return _df(conn, q)
+
+def add_sg_personal_debt(person_name: str, amount: float, description: str, debt_date: str):
+    with get_conn() as conn:
+        _run(conn, """
+            INSERT INTO sg_personal_debts (person_name, amount, description, date)
+            VALUES (%s, %s, %s, %s)
+        """, (person_name, amount, description, debt_date))
+
+def settle_sg_personal_debt(debt_id: int, paid_date: str):
+    with get_conn() as conn:
+        _run(conn, "UPDATE sg_personal_debts SET status='paid', paid_date=%s WHERE id=%s",
+             (paid_date, debt_id))
+
+def delete_sg_personal_debt(debt_id: int):
+    with get_conn() as conn:
+        _run(conn, "DELETE FROM sg_personal_debts WHERE id=%s", (debt_id,))
