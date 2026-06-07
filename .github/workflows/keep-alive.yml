@@ -1,0 +1,9 @@
+name: Keep Alive
+on:
+  schedule:
+    - cron: '0 */4 * * *'
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl https://budget-app-ypsxgdp6zsfxxfuuxgepks.streamlit.app/
