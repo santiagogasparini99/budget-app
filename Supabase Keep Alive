@@ -1,3 +1,5 @@
+name: Supabase Keep Alive
+
 on:
   schedule:
     - cron: '0 0 */3 * *'  # Corre cada 3 días a medianoche UTC
