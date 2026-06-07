@@ -193,12 +193,20 @@ with st.sidebar:
     st.divider()
 
     now   = datetime.now()
-    years = list(range(2024, 2031))
-    month_names = list(db.MONTHS_ES.values())
-    months_inv  = {v: k for k, v in db.MONTHS_ES.items()}
+    years = list(range(2026, 2031))
+    month_names_all = list(db.MONTHS_ES.values())
+    months_inv      = {v: k for k, v in db.MONTHS_ES.items()}
 
-    sel_year       = st.selectbox("Año", years, index=years.index(now.year))
-    sel_month_name = st.selectbox("Mes", month_names, index=now.month - 1)
+    sel_year = st.selectbox("Año", years, index=years.index(now.year) if now.year in years else 0)
+
+    if sel_year == 2026:
+        month_names = month_names_all[5:]  # Junio en adelante
+        default_month_idx = max(0, now.month - 6) if now.year == 2026 else 0
+    else:
+        month_names = month_names_all
+        default_month_idx = now.month - 1 if now.year == sel_year else 0
+
+    sel_month_name = st.selectbox("Mes", month_names, index=default_month_idx)
     M = months_inv[sel_month_name]
     Y = sel_year
 
