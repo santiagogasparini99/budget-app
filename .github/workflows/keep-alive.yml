@@ -1,9 +1,16 @@
 name: Keep Alive
+
 on:
   schedule:
     - cron: '0 */4 * * *'
+  workflow_dispatch:
+
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - run: curl https://budget-app-ypsxgdp6zsfxxfuuxgepks.streamlit.app/
+      - name: Ping Streamlit
+        run: curl -s -o /dev/null -w "Streamlit: %{http_code}\n" https://budget-app-ypsxgdp6zsfxxfuuxgepks.streamlit.app/
+
+      - name: Ping Supabase
+        run: curl -s -o /dev/null -w "Supabase: %{http_code}\n" https://pskfhdscxuauqxsmfrjm.supabase.co/health
