@@ -78,6 +78,7 @@ def _sg_debts():          return db.get_sg_personal_debts(only_pending=True)
 
 def _clear_sg_cache():
     _sg_accounts.clear(); _sg_debts.clear(); _sg_accounts_month.clear()
+    st.session_state["sg_form_v"] = st.session_state.get("sg_form_v", 0) + 1
 
 def _apply_payment(account_id: int, expense_amount: float, month: int, year: int) -> float:
     """Subtract expense from bank or add to CC debt for given month. Returns signed delta."""
@@ -1900,6 +1901,7 @@ with tab_sg:
 
     # 1. Actualizar saldos
     with st.expander("✏️ Actualizar saldos (bancos y tarjetas)"):
+        _fv = st.session_state.get("sg_form_v", 0)
         with st.form("sg_update_balances"):
             upd_vals = {}
             _bank_rows = banks.reset_index(drop=True)
@@ -1910,7 +1912,7 @@ with tab_sg:
             for col, (_, row) in zip(_bank_cols, _bank_sorted):
                 upd_vals[int(row["id"])] = col.number_input(
                     f"🏦 {row['account_name']}", value=float(row["balance"]),
-                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
+                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}_v{_fv}",
                 )
             _cc_rows = credits.reset_index(drop=True)
             _cc_cols = st.columns(len(_cc_rows)) if not _cc_rows.empty else []
@@ -1920,7 +1922,7 @@ with tab_sg:
             for col, (_, row) in zip(_cc_cols, _cc_sorted):
                 upd_vals[int(row["id"])] = col.number_input(
                     f"💳 {row['account_name']}", value=float(row["balance"]),
-                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}",
+                    step=1.0, format="%.0f", key=f"upd_acc_{row['id']}_v{_fv}",
                 )
             if st.form_submit_button("💾 Guardar saldos", type="primary", use_container_width=True):
                 for acc_id, val in upd_vals.items():
