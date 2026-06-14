@@ -2,15 +2,59 @@ name: Keep Alive
 
 on:
   schedule:
-    - cron: "0 */4 * * *"
-  workflow_dispatch:
+    - cron: "0 */4 * * *"   # cada 4 horas
+  workflow_dispatch:          # permite correrlo a mano desde la pestaña Actions
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Streamlit
-        run: curl -s https://budget-app-ypsxgdp6zsfxxfuuxgepks.streamlit.app/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-      - name: Ping Supabase
-        run: curl -s https://pskfhdscxuauqxsmfrjm.supabase.co/health
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Open app (wakes Streamlit + queries Supabase)
+        run: |
+          python - <<'PY'
+          import sys
+          from playwright.sync_api import TimeoutError as PWTimeout
+          from playwright.sync_api import sync_playwright
+
+          APP_URL = "https://budget-app-ypsxgdp6zsfxxfuuxgepks.streamlit.app/"
+          READY_TEXT = "El jardín"  # heading que aparece cuando la app arranca
+
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page()
+              page.set_default_timeout(120_000)
+
+              print(f"Opening {APP_URL} ...")
+              page.goto(APP_URL, wait_until="domcontentloaded")
+
+              # Si Streamlit durmio la app, muestra un boton para despertarla.
+              try:
+                  wake = page.get_by_role("button", name="get this app back up", exact=False)
+                  if wake.count() > 0:
+                      print("App was asleep - clicking the wake-up button...")
+                      wake.first.click()
+              except Exception as exc:
+                  print(f"(no wake button / {exc})")
+
+              # La app corre db.init_db() al cargar: si el heading renderiza,
+              # Supabase recibio queries reales y queda activa.
+              try:
+                  page.get_by_text(READY_TEXT, exact=False).first.wait_for()
+                  print("App rendered - Supabase was queried. OK")
+              except PWTimeout:
+                  print("WARNING: app did not render in time.")
+                  print(page.content()[:1000])
+                  browser.close()
+                  sys.exit(1)
+
+              browser.close()
+          PY
